@@ -20,11 +20,12 @@ from .api.spotify import MirrorSpotifyPlayback, spotify_new_session, spotify_get
 from .api.tidal import tidal_get_track_metadata, tidal_add_account_pt1, tidal_add_account_pt2
 from .api.youtube_music import youtube_music_get_track_metadata, youtube_music_add_account
 from .api.crunchyroll import crunchyroll_get_episode_metadata, crunchyroll_add_account
-from .downloader import DownloadWorker, RetryWorker
+from .downloader import DownloadWorker, RetryWorker, build_final_file_path
 from .otsconfig import config_dir, config
 from .parse_item import parsingworker, parse_url
 from .runtimedata import account_pool, pending, download_queue, download_queue_lock, pending_lock, register_worker, kill_all_workers, set_worker_restart_callback
 from .search import get_search_results
+from .utils import format_item_path, add_to_m3u_file
 
 if not config.get('debug_mode'):
     logging.disable(logging.CRITICAL)
@@ -59,6 +60,37 @@ class QueueWorker(threading.Thread):
                     token = get_account_token(item['item_service'])
                     item_metadata = globals()[f"{item['item_service']}_get_{item['item_type']}_metadata"](token, item['item_id'])
                     if item_metadata:
+                        # Align track numbering and path with playlist ordering before writing M3U
+                        if item['item_service'] == 'youtube_music' and item.get('parent_category') == 'album':
+                            item_metadata.update({'track_number': item.get('playlist_number')})
+                        if item.get('parent_category') == 'playlist':
+                            item_metadata.update({'track_number': item.get('playlist_number')})
+
+                        file_path = None
+                        m3u_written = False
+                        try:
+                            item_path = format_item_path(item, item_metadata)
+
+                            if item['item_type'] in ['track', 'podcast_episode']:
+                                dl_root = config.get("audio_download_path")
+                            elif item['item_type'] in ['movie', 'episode']:
+                                dl_root = config.get("video_download_path")
+                            else:
+                                dl_root = config.get("audio_download_path")
+
+                            base_path = os.path.join(dl_root, item_path)
+
+                            # Only pre-create playlist entries when output extension is deterministic
+                            if not config.get('raw_media_download'):
+                                file_path = build_final_file_path(base_path, item['item_type'], default_format=None, item_service=item['item_service'])
+                                if config.get('create_m3u_file') and item.get('parent_category') == 'playlist':
+                                    temp_item = item.copy()
+                                    temp_item['file_path'] = file_path
+                                    add_to_m3u_file(temp_item, item_metadata)
+                                    m3u_written = True
+                        except Exception as m3u_error:
+                            logging.getLogger("cli").error(f"Failed to prewrite M3U entry for {item.get('item_id')}: {m3u_error}")
+
                         with download_queue_lock:
                             download_queue[local_id] = {
                                 'local_id': local_id,
@@ -67,13 +99,14 @@ class QueueWorker(threading.Thread):
                                 "item_type": item["item_type"],
                                 'item_id': item['item_id'],
                                 'item_status': 'Waiting',
-                                "file_path": None,
+                                "file_path": file_path,
                                 "item_name": item_metadata["title"],
                                 "item_by": item_metadata["artists"],
                                 'parent_category': item['parent_category'],
                                 'playlist_name': item.get('playlist_name'),
                                 'playlist_by': item.get('playlist_by'),
-                                'playlist_number': item.get('playlist_number')
+                                'playlist_number': item.get('playlist_number'),
+                                '_m3u_written': m3u_written
                                 }
                 else:
                     time.sleep(0.2)

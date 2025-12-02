@@ -28,6 +28,43 @@ from .utils import format_item_path, convert_audio_format, embed_metadata, set_m
 
 logger = get_logger("downloader")
 
+# Shared helper to compute the final output path with the expected extension.
+def build_final_file_path(base_path, item_type, default_format, item_service=None):
+    """
+    Determine the final output path (with extension) for an item.
+    Keeps the logic in one place so playlist writing and renaming stay in sync.
+    """
+    # If conversion is enabled, use the configured output format (predictable)
+    if not config.get('raw_media_download'):
+        if item_type == "track":
+            return base_path + "." + config.get("track_file_format")
+        if item_type == "podcast_episode":
+            return base_path + "." + config.get("podcast_file_format")
+        return base_path
+
+    # Raw downloads need the service's native/container format
+    if not default_format:
+        default_map = {
+            "spotify": ".ogg",
+            "deezer": ".mp3",
+            "soundcloud": ".mp3",
+            "youtube_music": ".m4a",
+            "apple_music": ".m4a",
+            "bandcamp": ".mp3",
+            "qobuz": ".flac",
+            "tidal": ".flac",
+        }
+        default_format = default_map.get(item_service)
+
+    if default_format and not default_format.startswith("."):
+        default_format = "." + default_format
+
+    if default_format:
+        return base_path + default_format
+
+    logger.warning("Default format not set for raw download; using base path without extension")
+    return base_path
+
 
 class RetryWorker(QObject):
     progress = pyqtSignal(dict, str, int)
@@ -297,29 +334,12 @@ class DownloadWorker(QObject):
         # All accounts exhausted
         raise RuntimeError(f"Failed to load audio stream after trying {len(tried_accounts)} account(s)")
 
-    def _build_final_file_path(self, base_path, item_type, default_format):
-        """
-        Determine the final output path (with extension) for an item.
-        Keeps the logic in one place so playlist writing and renaming stay in sync.
-        """
-        if config.get('raw_media_download'):
-            if not default_format:
-                logger.warning("Default format not set for raw download; using base path without extension")
-                return base_path
-            return base_path + default_format
-
-        if item_type == "track":
-            return base_path + "." + config.get("track_file_format")
-        if item_type == "podcast_episode":
-            return base_path + "." + config.get("podcast_file_format")
-        return base_path
-
     def _ensure_playlist_entry(self, item, item_metadata, base_path, default_format, final_path=None):
         """
         Create the M3U entry early so playlists are complete even if downloads fail.
         Returns the final file path used for the entry.
         """
-        final_path = final_path or self._build_final_file_path(base_path, item['item_type'], default_format)
+        final_path = final_path or build_final_file_path(base_path, item['item_type'], default_format, item_service=item.get('item_service'))
 
         if not final_path:
             return None
@@ -493,11 +513,12 @@ class DownloadWorker(QObject):
                                                 set_music_thumbnail(file_path, item_metadata)
 
                                     # M3U
-                                    if config.get('create_m3u_file') and item.get('parent_category') == 'playlist':
+                                    if config.get('create_m3u_file') and item.get('parent_category') == 'playlist' and not item.get('_m3u_written'):
                                         item['item_status'] = 'Adding To M3U'
                                         self.update_progress(item, self.tr("Adding To M3U") if self.gui else "Adding To M3U", 99)
                                         try:
                                             add_to_m3u_file(item, item_metadata)
+                                            item['_m3u_written'] = True
                                         except Exception as m3u_error:
                                             logger.error(f"Failed to add item to M3U file: {str(m3u_error)}\nTraceback: {traceback.format_exc()}")
                                             logger.warning("M3U write failed, but file download was successful and will not be deleted")
@@ -1226,7 +1247,7 @@ class DownloadWorker(QObject):
                                 item_metadata.update(extra_metadata)
 
                         if not final_file_path:
-                            final_file_path = self._build_final_file_path(file_path, item_type, default_format)
+                            final_file_path = build_final_file_path(file_path, item_type, default_format, item_service=item_service)
                         file_path = final_file_path
 
                         os.rename(temp_file_path, file_path)
