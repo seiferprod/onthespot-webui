@@ -297,6 +297,46 @@ class DownloadWorker(QObject):
         # All accounts exhausted
         raise RuntimeError(f"Failed to load audio stream after trying {len(tried_accounts)} account(s)")
 
+    def _build_final_file_path(self, base_path, item_type, default_format):
+        """
+        Determine the final output path (with extension) for an item.
+        Keeps the logic in one place so playlist writing and renaming stay in sync.
+        """
+        if config.get('raw_media_download'):
+            if not default_format:
+                logger.warning("Default format not set for raw download; using base path without extension")
+                return base_path
+            return base_path + default_format
+
+        if item_type == "track":
+            return base_path + "." + config.get("track_file_format")
+        if item_type == "podcast_episode":
+            return base_path + "." + config.get("podcast_file_format")
+        return base_path
+
+    def _ensure_playlist_entry(self, item, item_metadata, base_path, default_format, final_path=None):
+        """
+        Create the M3U entry early so playlists are complete even if downloads fail.
+        Returns the final file path used for the entry.
+        """
+        final_path = final_path or self._build_final_file_path(base_path, item['item_type'], default_format)
+
+        if not final_path:
+            return None
+
+        if config.get('create_m3u_file') and item.get('parent_category') == 'playlist':
+            # Avoid duplicate writes when we retry downloads
+            if not item.get('_m3u_written'):
+                item['file_path'] = final_path
+                try:
+                    add_to_m3u_file(item, item_metadata)
+                    item['_m3u_written'] = True
+                except Exception as m3u_error:
+                    logger.error(f"Failed to add item to M3U file: {str(m3u_error)}\nTraceback: {traceback.format_exc()}")
+                    logger.warning("M3U write failed, but file download was successful and will not be deleted")
+
+        return final_path
+
 
     def run(self):
         while self.is_running:
@@ -363,6 +403,7 @@ class DownloadWorker(QObject):
 
                 temp_file_path = ''
                 file_path = ''
+                final_file_path = None
                 if item_service != 'generic':
                     if item_type in ['track', 'podcast_episode']:
                         dl_root = config.get("audio_download_path")
@@ -487,6 +528,7 @@ class DownloadWorker(QObject):
 
                         default_format = ".ogg"
                         temp_file_path += default_format
+                        final_file_path = self._ensure_playlist_entry(item, item_metadata, file_path, default_format, final_file_path) or final_file_path
 
                         # Session recreation is now handled automatically in spotify_get_token()
                         # The token we received is already from a fresh session
@@ -751,6 +793,8 @@ class DownloadWorker(QObject):
                                     urlkey = genurlkey(song["SNG_ID"], song["MD5_ORIGIN"], song["MEDIA_VERSION"], song_quality)
                                     url = "https://e-cdns-proxy-%s.dzcdn.net/mobile/1/%s" % (song["MD5_ORIGIN"][0], urlkey.decode())
 
+                                final_file_path = self._ensure_playlist_entry(item, item_metadata, file_path, default_format, final_file_path) or final_file_path
+
                                 stall_timeout = config.get("download_stall_timeout")
                                 # Timeout tuple: (connect timeout, read timeout)
                                 # Both set to stall_timeout to ensure requests don't hang
@@ -855,6 +899,7 @@ class DownloadWorker(QObject):
                                 info_dict = video.extract_info(item_url)
                                 bitrate = f"{info_dict.get('abr')}k"
                                 default_format = f".{info_dict.get('audio_ext')}"
+                            final_file_path = self._ensure_playlist_entry(item, item_metadata, file_path, default_format, final_file_path) or final_file_path
                             video.download(item_url)
 
                     elif item_service in ("bandcamp", "qobuz", "tidal"):
@@ -866,6 +911,8 @@ class DownloadWorker(QObject):
                             default_format = '.mp3'
                             bitrate = "128k"
                             file_url = item_metadata['file_url']
+
+                        final_file_path = self._ensure_playlist_entry(item, item_metadata, file_path, default_format, final_file_path) or final_file_path
 
                         # Retry loop for handling stalls and connection resets
                         max_download_retries = 3
@@ -966,6 +1013,7 @@ class DownloadWorker(QObject):
                             continue
 
                         decryption_key = apple_music_get_decryption_key(token, stream_url, item_id)
+                        final_file_path = self._ensure_playlist_entry(item, item_metadata, file_path, default_format, final_file_path) or final_file_path
 
                         ydl_opts = {}
                         ydl_opts['quiet'] = True
@@ -1177,12 +1225,9 @@ class DownloadWorker(QObject):
                             if isinstance(extra_metadata, dict):
                                 item_metadata.update(extra_metadata)
 
-                        if config.get('raw_media_download'):
-                            file_path += default_format
-                        elif item_type == "track":
-                            file_path += "." + config.get("track_file_format")
-                        elif item_type == "podcast_episode":
-                            file_path += "." + config.get("podcast_file_format")
+                        if not final_file_path:
+                            final_file_path = self._build_final_file_path(file_path, item_type, default_format)
+                        file_path = final_file_path
 
                         os.rename(temp_file_path, file_path)
                         item['file_path'] = file_path
@@ -1224,14 +1269,10 @@ class DownloadWorker(QObject):
                                 set_music_thumbnail(file_path, item_metadata)
 
                         # M3U
-                        if config.get('create_m3u_file') and item.get('parent_category') == 'playlist':
+                        if config.get('create_m3u_file') and item.get('parent_category') == 'playlist' and not item.get('_m3u_written'):
                             item['item_status'] = 'Adding To M3U'
                             self.update_progress(item, self.tr("Adding To M3U") if self.gui else "Adding To M3U", 99)
-                            try:
-                                add_to_m3u_file(item, item_metadata)
-                            except Exception as m3u_error:
-                                logger.error(f"Failed to add item to M3U file: {str(m3u_error)}\nTraceback: {traceback.format_exc()}")
-                                logger.warning("M3U write failed, but file download was successful and will not be deleted")
+                            final_file_path = self._ensure_playlist_entry(item, item_metadata, file_path, default_format, final_file_path)
 
                     # Video Formatting
                     elif item_type in ('movie', 'episode'):
