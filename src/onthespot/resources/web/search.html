@@ -199,11 +199,29 @@
 
         table {
             width: 100%;
+            border-collapse: collapse; /* ensure row borders render cleanly */
         }
 
         th, td {
             padding: 12px 10px;
             font-size: 13px;
+            /* remove the per-cell bottom border so we can draw one full-width
+               separator per row (prevents misaligned fragments in the action col) */
+            border-bottom: none;
+        }
+
+        /* Render a full-width separator on rows instead of per-cell borders */
+        table tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        /* Remove trailing separator on the last row */
+        table tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        .type-column {
+            white-space: nowrap;
         }
 
         /* Result item styling */
@@ -226,6 +244,91 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        /* Type column alignment */
+        th.type-column,
+        td.type-column {
+            text-align: right;
+        }
+
+        @media screen and (max-width: 600px) {
+            /* Keep only thumbnail, name, and type visible and sized cleanly */
+            table thead th.hide-on-mobile,
+            table tbody td.hide-on-mobile,
+            table thead th.action-header,
+            table tbody td.action-cell-td {
+                display: none !important;
+            }
+
+            /* Grid layout per row: thumbnail | name | type */
+            table tbody tr {
+                display: grid;
+                grid-template-columns: 56px 1fr auto;
+                align-items: center;
+                column-gap: 8px; /* tighten spacing so badge sits closer */
+                padding: 8px 8px;
+                border-bottom: 1px solid rgba(255,255,255,0.06);
+            }
+
+            /* Hide the table header on mobile to avoid the heavy dark band */
+            table thead {
+                display: none !important;
+            }
+
+            /* Match header to the body grid */
+            table thead tr {
+                display: grid;
+                grid-template-columns: 56px 1fr auto;
+                align-items: center;
+                column-gap: 10px;
+                padding: 10px 8px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            /* Reset cell padding to work with the grid and avoid per-cell borders
+               creating disjointed separators. We'll draw a single border on each
+               row so it spans the full width. */
+            th, td {
+                padding: 0;
+                border-bottom: none; /* prevent fragmented cell bottoms */
+            }
+
+            /* Remove trailing row separator */
+            table tbody tr:last-child {
+                border-bottom: none;
+            }
+
+            .item-thumbnail {
+                width: 56px !important;
+                height: 56px !important;
+                min-width: 56px;
+                border-radius: 8px;
+                object-fit: cover;
+                display: block;     /* avoid baseline alignment issues */
+                align-self: center; /* ensure vertical centering */
+            }
+
+            .item-name {
+                max-width: none;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            th.type-column,
+            td.type-column {
+                text-align: right;
+                justify-self: end;
+            }
+
+            td.type-column .type-badge {
+                margin-left: 6px;
+                float: none;
+                display: inline-block;
+            }
         }
 
         /* Type badges */
@@ -284,17 +387,50 @@
             vertical-align: middle;
         }
 
-        /* Action button cell */
-        .action-cell {
-            display: flex;
-            gap: 4px;
+        /* Action button group inside the action column */
+        /* center the buttons inside the cell horizontally and vertically */
+        .action-group {
+            display: inline-flex;
+            gap: 8px;
             flex-wrap: nowrap;
+            align-items: center;    /* center vertically */
+            justify-content: center; /* center horizontally within its TD */
         }
 
-        .action-cell .download-action-button {
+        /* Ensure the table cell (TD) that contains the action-group centers its
+           child horizontally and vertically. Using text-align keeps the inner
+           inline-flex group centered without converting the TD itself to flex. */
+        td.action-cell-td {
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        /* Hide action button cell on small screens */
+        @media screen and (max-width: 600px) {
+            .action-group,
+            th.action-header,
+            td.action-cell-td {
+                display: none !important;
+            }
+            .type-badge {
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(59,130,246,0.08);
+                border: 1px solid rgba(59,130,246,0.12);
+                transition: background 0.18s, box-shadow 0.18s;
+            }
+            .type-badge:hover {
+                background: rgba(59,130,246,0.12);
+                box-shadow: 0 4px 16px rgba(59,130,246,0.16);
+            }
+        }
+
+        .action-group .download-action-button {
             padding: 6px;
             min-width: 32px;
             min-height: 32px;
+            display: inline-flex; /* ensure icon centers inside */
+            align-items: center;
+            justify-content: center;
         }
 
         /* Empty state */
@@ -452,27 +588,28 @@
             }
 
             .item-name {
-                max-width: 140px;
+                max-width: calc(100% - 120px);
+                min-width: 0;
             }
 
             /* Compact type badge on mobile */
             .type-badge {
-                padding: 3px 8px;
-                font-size: 10px;
+                padding: 2px 7px;
+                font-size: 9px;
             }
 
             /* Compact action buttons */
-            .action-cell {
+            .action-group {
                 gap: 2px;
             }
 
-            .action-cell .download-action-button {
+            .action-group .download-action-button {
                 padding: 5px;
                 min-width: 28px;
                 min-height: 28px;
             }
 
-            .action-cell .download-action-button img {
+            .action-group .download-action-button img {
                 width: 14px;
                 height: 14px;
             }
@@ -524,7 +661,8 @@
             }
 
             .item-name {
-                max-width: 100px;
+                max-width: none;
+                min-width: 0;
             }
 
             .image-preview-popup img {
@@ -541,7 +679,7 @@
         <ul>
             <li><a class="active" href="/search">Search</a></li>
             <li><a href="/download_queue">Downloads</a></li>
-            <li><a href="/plex_playlists">Plex playlist imports</a></li>
+            <li><a href="/plex_playlists">Plex</a></li>
             {% if user and user.is_admin %}<li><a href="/settings">Settings</a></li>{% endif %}
             <li><a href="/about">About</a></li>
             <li style="float: right;"><a href="/api/logout" style="color: #e74c3c;">Logout</a></li>
@@ -618,9 +756,9 @@
                             {% endif %}
                             <th>Name</th>
                             <th class="hide-on-mobile">By</th>
-                            <th>Type</th>
+                            <th class="type-column">Type</th>
                             <th class="hide-on-mobile">Service</th>
-                            <th>Action</th>
+                            <th class="action-header">Action</th>
                         </tr>
                     </thead>
                     <tbody id="results-body">
@@ -844,7 +982,7 @@
         }
 
         // ============= TYPE BADGE =============
-        function createTypeBadge(type) {
+        function createTypeBadge(type, url) {
             const typeClasses = {
                 'track': 'type-track',
                 'album': 'type-album',
@@ -855,6 +993,10 @@
                 'audiobook': 'type-audiobook'
             };
             const className = typeClasses[type?.toLowerCase()] || '';
+            // On mobile, make badge clickable for download
+            if (window.innerWidth <= 600) {
+                return `<span class="type-badge ${className}" onclick="handleDownload('${url}')">${capitalizeFirstLetter(type)}</span>`;
+            }
             return `<span class="type-badge ${className}">${capitalizeFirstLetter(type)}</span>`;
         }
 
@@ -990,7 +1132,8 @@
                 
                 // Type
                 const typeCell = document.createElement('td');
-                typeCell.innerHTML = createTypeBadge(item.item_type);
+                typeCell.className = 'type-column';
+                typeCell.innerHTML = createTypeBadge(item.item_type, item.item_url);
                 row.appendChild(typeCell);
                 
                 // Service (icon and text inline)
@@ -1003,9 +1146,10 @@
                 
                 // Actions
                 const actionCell = document.createElement('td');
+                actionCell.className = 'action-cell-td';
                 const linkButton = createButton('icons/link.png', 'Open Link', `window.open('${item.item_url}', '_blank')`);
                 const downloadButton = createButton('icons/download.png', 'Download', `handleDownload('${item.item_url}')`);
-                actionCell.innerHTML = `<div class="action-cell">${linkButton}${downloadButton}</div>`;
+                actionCell.innerHTML = `<div class="action-group">${linkButton}${downloadButton}</div>`;
                 row.appendChild(actionCell);
                 
                 tableBody.appendChild(row);
