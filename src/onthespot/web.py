@@ -33,11 +33,56 @@ except Exception as e:
 from .downloader import DownloadWorker, RetryWorker
 from .otsconfig import cache_dir, config_dir, config
 from .parse_item import parsingworker, parse_url
-from .runtimedata import get_logger, account_pool, pending, download_queue, download_queue_lock, pending_lock, parsing, parsing_lock, register_worker, kill_all_workers, set_worker_restart_callback
+from .runtimedata import get_logger, account_pool, pending, download_queue, download_queue_lock, pending_lock, parsing, parsing_lock, register_worker, set_worker_restart_callback
 from .search import get_search_results
 from .utils import format_bytes
 
 logger = get_logger("web")
+_restart_lock = threading.Lock()
+_restart_in_progress = False
+
+
+def _cache_download_queue_to_disk():
+    """Persist the current download queue so the new process can resume it."""
+    cached_path = os.path.join(cache_dir(), 'cached_download_queue.txt')
+    with download_queue_lock:
+        with open(cached_path, 'w') as file:
+            for item in download_queue.values():
+                file.write(item['item_url'] + '\n')
+    return cached_path
+
+
+def trigger_hard_restart(reason):
+    """
+    Spawn a fresh web process and exit.
+
+    Mirrors the manual Restart button behaviour so automatic restarts
+    triggered by repeated download failures get the same recovery path.
+    """
+    global _restart_in_progress
+    with _restart_lock:
+        if _restart_in_progress:
+            logger.warning("Hard restart already in progress, skipping duplicate trigger")
+            return
+        _restart_in_progress = True
+
+    logger.warning(f"Hard restart requested: {reason}")
+
+    try:
+        cached_path = _cache_download_queue_to_disk()
+        logger.info(f"Cached download queue to {cached_path}")
+    except Exception as e:
+        logger.error(f"Failed to cache download queue before restart: {e}")
+
+    try:
+        subprocess.Popen([sys.executable, '-m', 'onthespot.web'] + (sys.argv[1:]))
+    except Exception as e:
+        logger.error(f"Failed to spawn replacement process: {e}")
+        with _restart_lock:
+            _restart_in_progress = False
+        return
+
+    os._exit(0)
 os.environ['FLASK_ENV'] = 'production'
 web_resources = os.path.join(config.app_root, 'resources', 'web')
 app = Flask('OnTheSpot', template_folder=web_resources, static_folder=web_resources)
@@ -559,13 +604,8 @@ def retry_items():
 @app.route('/api/restart', methods=['POST'])
 @login_required
 def restart():
-    logger.info("Caching Download Queue...")
-    with open(os.path.join(cache_dir(), 'cached_download_queue.txt'), 'w') as file:
-        for local_id, item in download_queue.items():
-            file.write(item['item_url'] + '\n')
-    logger.info("Restarting...")
-    subprocess.Popen([sys.executable, '-m', 'onthespot.web'] + (sys.argv[1:]))
-    os._exit(0)
+    trigger_hard_restart("manual restart via /api/restart")
+    return jsonify(success=True)
 
 
 @app.route('/api/download_queue')
@@ -822,19 +862,8 @@ def main():
         logger.info("All workers started and registered")
 
     def restart_workers():
-        """Kill all workers and restart them - called when downloads fail repeatedly"""
-        logger.warning("RESTARTING ALL WORKERS due to repeated download failures...")
-
-        # Kill existing workers
-        kill_all_workers()
-
-        # Wait a bit for cleanup
-        time.sleep(2)
-
-        # Start fresh workers
-        start_workers()
-
-        logger.info("Worker restart complete!")
+        """Hard restart the web process - used when downloads keep failing."""
+        trigger_hard_restart("consecutive download failures threshold reached")
 
     # Register the restart callback
     set_worker_restart_callback(restart_workers)
