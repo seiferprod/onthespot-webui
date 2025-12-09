@@ -150,7 +150,7 @@ def increment_failure_count():
         current_count = consecutive_failures
 
     # Threshold for triggering worker restart
-    FAILURE_THRESHOLD = 5
+    FAILURE_THRESHOLD = 3
 
     if current_count >= FAILURE_THRESHOLD:
         logger_.error(f"🚨 CRITICAL: Consecutive failures reached {current_count}, triggering HARD RESTART...")
