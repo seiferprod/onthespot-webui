@@ -369,6 +369,9 @@ def spotify_get_token(parsing_index):
 
     try:
         token = account_pool[parsing_index]['login']['session']
+        # Check if session is a valid object (not an empty string from failed login)
+        if not token or isinstance(token, str):
+            raise AttributeError("Session is empty or invalid")
         logger.debug(f"Using existing session for {username}")
         return token
 

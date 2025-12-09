@@ -175,6 +175,11 @@ def parsingworker():
                 current_url = item['item_url']
                 token = get_account_token(current_service)
 
+                # Check if token is valid
+                if token is None:
+                    logger.error(f"Failed to get valid token for {current_service}. Skipping item: {current_url}")
+                    continue
+
                 if current_service == "spotify":
                     if current_type == "playlist":
                         items = spotify_get_playlist_items(token, current_id)
