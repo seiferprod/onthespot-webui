@@ -600,12 +600,40 @@ class DownloadWorker(QObject):
                                 # Get stream (with account fallback)
                                 stream, token, _ = self._try_get_spotify_stream(item, item_id, item_type, token, quality)
 
-                                total_size = stream.input_stream.size
-                                downloaded = 0
-                                last_progress_time = time.time()
+                                # Validate stream is working with initial test read
                                 stall_timeout = config.get("download_stall_timeout")
+                                test_data = None
+                                test_error = None
+                                
+                                def test_stream_read():
+                                    nonlocal test_data, test_error
+                                    try:
+                                        # Try to read first chunk to verify stream is alive
+                                        test_data = stream.input_stream.stream().read(1024)
+                                    except Exception as e:
+                                        test_error = e
+                                
+                                test_thread = threading.Thread(target=test_stream_read, daemon=True)
+                                test_thread.start()
+                                test_thread.join(timeout=5)  # 5 second timeout for initial stream validation
+                                
+                                if test_thread.is_alive():
+                                    raise Exception("Stream validation failed: initial read blocked (session likely dead)")
+                                
+                                if test_error:
+                                    raise test_error
+                                
+                                if test_data is None:
+                                    raise Exception("Stream validation failed: no data returned")
+
+                                total_size = stream.input_stream.size
+                                downloaded = len(test_data)  # Account for test read
+                                last_progress_time = time.time()
 
                                 with open(temp_file_path, 'wb') as file:
+                                    # Write initial test data
+                                    file.write(test_data)
+                                    
                                     consecutive_empty_reads = 0
                                     MAX_CONSECUTIVE_EMPTY = 3
 
