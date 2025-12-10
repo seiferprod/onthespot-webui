@@ -1349,7 +1349,9 @@ class DownloadWorker(QObject):
                                 item_metadata['album_name'] = item.get('playlist_name', item_metadata.get('album'))
                                 item_metadata['album_artists'] = 'Various Artists'
                                 item_metadata['album_type'] = 'compilation'  # This triggers compilation=1 in embed_metadata
-                                logger.info(f"Playlist track: setting album to '{item_metadata['album']}', album_artist='Various Artists', and album_type='compilation'")
+                                item_metadata['disc_number'] = 1
+                                item_metadata['total_discs'] = 1
+                                logger.info(f"Playlist track: setting album to '{item_metadata['album']}', album_artist='Various Artists', disc=1/1, and album_type='compilation'")
 
                             embed_metadata(item, item_metadata)
 
