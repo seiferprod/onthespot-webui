@@ -191,35 +191,36 @@ def parsingworker():
                         with runtimedata.batch_parse_lock:
                             runtimedata.batch_parse_in_progress = True
                         
-                        logger.info(f"Starting to parse playlist: {current_id}")
-                        items = spotify_get_playlist_items(token, current_id)
-                        playlist_name, playlist_by = spotify_get_playlist_data(token, current_id)
-                        total_items = len(items)
-                        logger.info(f"Playlist '{playlist_name}' has {total_items} items, adding to pending queue...")
-                        for index, item in enumerate(items):
-                            try:
-                                item_id = item['track']['id']
-                                item_type = item['track']['type']
-                                local_id = format_local_id(item_id)
-                                with pending_lock:
-                                    pending[local_id] = {
-                                        'local_id': local_id,
-                                        'item_service': 'spotify',
-                                        'item_type': item_type,
-                                        'item_id': item_id,
-                                        'parent_category': 'playlist',
-                                        'playlist_name': playlist_name,
-                                        'playlist_by': playlist_by,
-                                        'playlist_number': str(index + 1),
-                                        'playlist_total': total_items
-                                        }
-                            except TypeError:
-                                logger.error(f'TypeError for {item}')
-                        logger.info(f"Finished adding {total_items} items from playlist '{playlist_name}' to pending queue")
-                        
-                        # Clear batch parse flag
-                        with runtimedata.batch_parse_lock:
-                            runtimedata.batch_parse_in_progress = False
+                        try:
+                            logger.info(f"Starting to parse playlist: {current_id}")
+                            items = spotify_get_playlist_items(token, current_id)
+                            playlist_name, playlist_by = spotify_get_playlist_data(token, current_id)
+                            total_items = len(items)
+                            logger.info(f"Playlist '{playlist_name}' has {total_items} items, adding to pending queue...")
+                            for index, item in enumerate(items):
+                                try:
+                                    item_id = item['track']['id']
+                                    item_type = item['track']['type']
+                                    local_id = format_local_id(item_id)
+                                    with pending_lock:
+                                        pending[local_id] = {
+                                            'local_id': local_id,
+                                            'item_service': 'spotify',
+                                            'item_type': item_type,
+                                            'item_id': item_id,
+                                            'parent_category': 'playlist',
+                                            'playlist_name': playlist_name,
+                                            'playlist_by': playlist_by,
+                                            'playlist_number': str(index + 1),
+                                            'playlist_total': total_items
+                                            }
+                                except TypeError:
+                                    logger.error(f'TypeError for {item}')
+                            logger.info(f"Finished adding {total_items} items from playlist '{playlist_name}' to pending queue")
+                        finally:
+                            # Always clear batch parse flag
+                            with runtimedata.batch_parse_lock:
+                                runtimedata.batch_parse_in_progress = False
                         
                         continue
                     elif current_type == "liked_songs":
@@ -227,30 +228,31 @@ def parsingworker():
                         with runtimedata.batch_parse_lock:
                             runtimedata.batch_parse_in_progress = True
                         
-                        logger.info("Starting to parse liked_songs")
-                        tracks = spotify_get_liked_songs(token)
-                        total_tracks = len(tracks)
-                        logger.info(f"Liked Songs has {total_tracks} items, adding to pending queue...")
-                        for index, track in enumerate(tracks):
-                            item_id = track['track']['id']
-                            local_id = format_local_id(item_id)
-                            with pending_lock:
-                                pending[local_id] = {
-                                    'local_id': local_id,
-                                    'item_service': 'spotify',
-                                    'item_type': 'track',
-                                    'item_id': item_id,
-                                    'parent_category': 'playlist',
-                                    'playlist_name': 'Liked Songs',
-                                    'playlist_by': 'me',
-                                    'playlist_number': str(index + 1),
-                                    'playlist_total': total_tracks
-                                    }
-                        logger.info(f"Finished adding {total_tracks} items from Liked Songs to pending queue")
-                        
-                        # Clear batch parse flag
-                        with runtimedata.batch_parse_lock:
-                            runtimedata.batch_parse_in_progress = False
+                        try:
+                            logger.info("Starting to parse liked_songs")
+                            tracks = spotify_get_liked_songs(token)
+                            total_tracks = len(tracks)
+                            logger.info(f"Liked Songs has {total_tracks} items, adding to pending queue...")
+                            for index, track in enumerate(tracks):
+                                item_id = track['track']['id']
+                                local_id = format_local_id(item_id)
+                                with pending_lock:
+                                    pending[local_id] = {
+                                        'local_id': local_id,
+                                        'item_service': 'spotify',
+                                        'item_type': 'track',
+                                        'item_id': item_id,
+                                        'parent_category': 'playlist',
+                                        'playlist_name': 'Liked Songs',
+                                        'playlist_by': 'me',
+                                        'playlist_number': str(index + 1),
+                                        'playlist_total': total_tracks
+                                        }
+                            logger.info(f"Finished adding {total_tracks} items from Liked Songs to pending queue")
+                        finally:
+                            # Always clear batch parse flag
+                            with runtimedata.batch_parse_lock:
+                                runtimedata.batch_parse_in_progress = False
                         
                         continue
                     elif current_type == "your_episodes":
@@ -258,31 +260,32 @@ def parsingworker():
                         with runtimedata.batch_parse_lock:
                             runtimedata.batch_parse_in_progress = True
                         
-                        logger.info("Starting to parse your_episodes")
-                        tracks = spotify_get_your_episodes(token)
-                        total_tracks = len(tracks)
-                        logger.info(f"Your Episodes has {total_tracks} items, adding to pending queue...")
-                        for index, track in enumerate(tracks):
-                            item_id = track['episode']['id']
-                            if item_id:
-                                local_id = format_local_id(item_id)
-                                with pending_lock:
-                                    pending[local_id] = {
-                                        'local_id': local_id,
-                                        'item_service': 'spotify',
-                                        'item_type': 'podcast_episode',
-                                        'item_id': item_id,
-                                        'parent_category': 'playlist',
-                                        'playlist_name': 'Your Episodes',
-                                        'playlist_by': 'me',
-                                        'playlist_number': str(index + 1),
-                                        'playlist_total': total_tracks
-                                        }
-                        logger.info(f"Finished adding {total_tracks} items from Your Episodes to pending queue")
-                        
-                        # Clear batch parse flag
-                        with runtimedata.batch_parse_lock:
-                            runtimedata.batch_parse_in_progress = False
+                        try:
+                            logger.info("Starting to parse your_episodes")
+                            tracks = spotify_get_your_episodes(token)
+                            total_tracks = len(tracks)
+                            logger.info(f"Your Episodes has {total_tracks} items, adding to pending queue...")
+                            for index, track in enumerate(tracks):
+                                item_id = track['episode']['id']
+                                if item_id:
+                                    local_id = format_local_id(item_id)
+                                    with pending_lock:
+                                        pending[local_id] = {
+                                            'local_id': local_id,
+                                            'item_service': 'spotify',
+                                            'item_type': 'podcast_episode',
+                                            'item_id': item_id,
+                                            'parent_category': 'playlist',
+                                            'playlist_name': 'Your Episodes',
+                                            'playlist_by': 'me',
+                                            'playlist_number': str(index + 1),
+                                            'playlist_total': total_tracks
+                                            }
+                            logger.info(f"Finished adding {total_tracks} items from Your Episodes to pending queue")
+                        finally:
+                            # Always clear batch parse flag
+                            with runtimedata.batch_parse_lock:
+                                runtimedata.batch_parse_in_progress = False
                         
                         continue
 
@@ -291,25 +294,26 @@ def parsingworker():
                     with runtimedata.batch_parse_lock:
                         runtimedata.batch_parse_in_progress = True
                     
-                    logger.info(f"Starting to parse artist: {current_id}")
-                    track_ids = youtube_get_channel_track_ids(token, current_id)
-                    total_items = len(track_ids)
-                    logger.info(f"Artist has {total_items} items, adding to pending queue...")
-                    for track_id in track_ids:
-                        local_id = format_local_id(track_id)
-                        with pending_lock:
-                            pending[local_id] = {
-                                'local_id': local_id,
-                                'item_service': current_service,
-                                'item_type': 'track',
-                                'item_id': track_id,
-                                'parent_category': 'album'
-                                }
-                    logger.info(f"Finished adding {total_items} items from artist to pending queue")
-                    
-                    # Clear batch parse flag
-                    with runtimedata.batch_parse_lock:
-                        runtimedata.batch_parse_in_progress = False
+                    try:
+                        logger.info(f"Starting to parse artist: {current_id}")
+                        track_ids = youtube_get_channel_track_ids(token, current_id)
+                        total_items = len(track_ids)
+                        logger.info(f"Artist has {total_items} items, adding to pending queue...")
+                        for track_id in track_ids:
+                            local_id = format_local_id(track_id)
+                            with pending_lock:
+                                pending[local_id] = {
+                                    'local_id': local_id,
+                                    'item_service': current_service,
+                                    'item_type': 'track',
+                                    'item_id': track_id,
+                                    'parent_category': 'album'
+                                    }
+                        logger.info(f"Finished adding {total_items} items from artist to pending queue")
+                    finally:
+                        # Always clear batch parse flag
+                        with runtimedata.batch_parse_lock:
+                            runtimedata.batch_parse_in_progress = False
                     
                     continue
 
@@ -342,25 +346,26 @@ def parsingworker():
                     with runtimedata.batch_parse_lock:
                         runtimedata.batch_parse_in_progress = True
                     
-                    logger.info(f"Starting to parse {current_type}: {current_id}")
-                    item_ids = globals()[f"{current_service}_get_{current_type}_episode_ids"](token, current_id)
-                    total_items = len(item_ids)
-                    logger.info(f"{current_type} has {total_items} items, adding to pending queue...")
-                    for item_id in item_ids:
-                        local_id = format_local_id(item_id)
-                        with pending_lock:
-                            pending[local_id] = {
-                                'local_id': local_id,
-                                'item_service': current_service,
-                                'item_type': 'podcast_episode',
-                                'item_id': item_id,
-                                'parent_category': current_type
-                                }
-                    logger.info(f"Finished adding {total_items} items from {current_type} to pending queue")
-                    
-                    # Clear batch parse flag
-                    with runtimedata.batch_parse_lock:
-                        runtimedata.batch_parse_in_progress = False
+                    try:
+                        logger.info(f"Starting to parse {current_type}: {current_id}")
+                        item_ids = globals()[f"{current_service}_get_{current_type}_episode_ids"](token, current_id)
+                        total_items = len(item_ids)
+                        logger.info(f"{current_type} has {total_items} items, adding to pending queue...")
+                        for item_id in item_ids:
+                            local_id = format_local_id(item_id)
+                            with pending_lock:
+                                pending[local_id] = {
+                                    'local_id': local_id,
+                                    'item_service': current_service,
+                                    'item_type': 'podcast_episode',
+                                    'item_id': item_id,
+                                    'parent_category': current_type
+                                    }
+                        logger.info(f"Finished adding {total_items} items from {current_type} to pending queue")
+                    finally:
+                        # Always clear batch parse flag
+                        with runtimedata.batch_parse_lock:
+                            runtimedata.batch_parse_in_progress = False
                     
                     continue
 
@@ -369,40 +374,41 @@ def parsingworker():
                     with runtimedata.batch_parse_lock:
                         runtimedata.batch_parse_in_progress = True
                     
-                    playlist_name = ''
-                    playlist_by = ''
-                    if current_type == "album":
-                        logger.info(f"Starting to parse album: {current_id}")
-                        track_ids = globals()[f"{current_service}_get_{current_type}_track_ids"](token, current_id)
-                    else:
-                        logger.info(f"Starting to parse {current_type}: {current_id}")
-                        playlist_name, playlist_by, track_ids = globals()[f"{current_service}_get_{current_type}_data"](token, current_id)
-                    if current_type == 'mix':
-                        current_type = 'playlist'
-                    if current_service == 'youtube' and not playlist_by:
-                        current_type = 'album'
+                    try:
+                        playlist_name = ''
+                        playlist_by = ''
+                        if current_type == "album":
+                            logger.info(f"Starting to parse album: {current_id}")
+                            track_ids = globals()[f"{current_service}_get_{current_type}_track_ids"](token, current_id)
+                        else:
+                            logger.info(f"Starting to parse {current_type}: {current_id}")
+                            playlist_name, playlist_by, track_ids = globals()[f"{current_service}_get_{current_type}_data"](token, current_id)
+                        if current_type == 'mix':
+                            current_type = 'playlist'
+                        if current_service == 'youtube' and not playlist_by:
+                            current_type = 'album'
 
-                    total_items = len(track_ids)
-                    logger.info(f"{current_type} has {total_items} items, adding to pending queue...")
-                    for index, track_id in enumerate(track_ids):
-                        local_id = format_local_id(track_id)
-                        with pending_lock:
-                            pending[local_id] = {
-                                'local_id': local_id,
-                                'item_service': current_service,
-                                'item_type': 'track',
-                                'item_id': track_id,
-                                'parent_category': current_type,
-                                'playlist_name': playlist_name,
-                                'playlist_by': playlist_by,
-                                'playlist_number': str(index + 1),
-                                'playlist_total': total_items
-                                }
-                    logger.info(f"Finished adding {total_items} items from {current_type} to pending queue")
-                    
-                    # Clear batch parse flag
-                    with runtimedata.batch_parse_lock:
-                        runtimedata.batch_parse_in_progress = False
+                        total_items = len(track_ids)
+                        logger.info(f"{current_type} has {total_items} items, adding to pending queue...")
+                        for index, track_id in enumerate(track_ids):
+                            local_id = format_local_id(track_id)
+                            with pending_lock:
+                                pending[local_id] = {
+                                    'local_id': local_id,
+                                    'item_service': current_service,
+                                    'item_type': 'track',
+                                    'item_id': track_id,
+                                    'parent_category': current_type,
+                                    'playlist_name': playlist_name,
+                                    'playlist_by': playlist_by,
+                                    'playlist_number': str(index + 1),
+                                    'playlist_total': total_items
+                                    }
+                        logger.info(f"Finished adding {total_items} items from {current_type} to pending queue")
+                    finally:
+                        # Always clear batch parse flag
+                        with runtimedata.batch_parse_lock:
+                            runtimedata.batch_parse_in_progress = False
                     
                     continue
 
