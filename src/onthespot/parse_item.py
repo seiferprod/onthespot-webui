@@ -205,14 +205,26 @@ def parsingworker():
                                 from io import BytesIO
                                 import os
                                 
-                                # Build playlist directory path
+                                # Build playlist directory path using only available variables
                                 playlist_path_template = config.get('playlist_path_formatter')
+                                # Use a dict that provides defaults for missing keys
+                                from string import Formatter
+                                class SafeFormatter(Formatter):
+                                    def get_value(self, key, args, kwargs):
+                                        if isinstance(key, str):
+                                            return kwargs.get(key, '')
+                                        return super().get_value(key, args, kwargs)
+                                
                                 playlist_vars = {
                                     'playlist_name': playlist_name,
                                     'playlist_owner': playlist_by,
-                                    'playlist_by': playlist_by
+                                    'playlist_by': playlist_by,
+                                    'playlist_number': '',  # Not applicable for playlist directory
+                                    'track_number': '',
+                                    'name': playlist_name,
+                                    'album': playlist_name
                                 }
-                                playlist_dir = playlist_path_template.format(**playlist_vars)
+                                playlist_dir = SafeFormatter().format(playlist_path_template, **playlist_vars)
                                 # Sanitize
                                 playlist_dir = sanitize_data(playlist_dir, True)
                                 
