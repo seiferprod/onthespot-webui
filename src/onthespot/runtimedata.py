@@ -30,6 +30,10 @@ parsing_lock = Lock()
 pending_lock = Lock()
 download_queue_lock = Lock()
 
+# Batch parsing state (for playlists/albums that add multiple items)
+batch_parse_in_progress = False
+batch_parse_lock = Lock()
+
 # Worker management
 worker_threads = []
 worker_threads_lock = Lock()
