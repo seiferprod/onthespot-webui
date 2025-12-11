@@ -46,7 +46,8 @@ BATCH_OPERATION_TIMEOUT = 60  # 1 minute
 # Worker management
 worker_threads = []
 worker_threads_lock = Lock()
-worker_restart_callback = None  # Function to call to restart workers
+worker_restart_callback = None  # Function to call to restart workers (soft restart)
+watchdog_restart_callback = None  # Function to call for hard restart when stuck
 worker_restart_lock = Lock()  # Prevent multiple simultaneous restarts
 worker_restart_in_progress = False
 account_consecutive_failures = {}  # Track failures per account index
@@ -264,10 +265,17 @@ def reset_failure_count(account_index=None):
 
 
 def set_worker_restart_callback(callback):
-    """Set the callback function to restart workers"""
+    """Set the callback function to restart workers (soft restart)"""
     global worker_restart_callback
     worker_restart_callback = callback
     logger_.info(f"Worker restart callback registered: {callback.__name__}")
+
+
+def set_watchdog_restart_callback(callback):
+    """Set the callback function for watchdog hard restart"""
+    global watchdog_restart_callback
+    watchdog_restart_callback = callback
+    logger_.info(f"Watchdog restart callback registered: {callback.__name__}")
 
 
 def set_batch_parse_flag(value):
@@ -289,12 +297,13 @@ def set_batch_queue_processing_flag(value):
 
 
 def check_and_clear_stuck_flags():
-    """Check if batch operation flags are stuck and clear them if timeout exceeded"""
+    """Check if batch operation flags are stuck and trigger hard restart if timeout exceeded"""
     import time
     global batch_parse_in_progress, batch_parse_start_time
     global batch_queue_processing, batch_queue_processing_start_time
+    global watchdog_restart_callback
     
-    cleared_any = False
+    should_restart = False
     
     # Check batch_parse_in_progress flag
     with batch_parse_lock:
@@ -302,10 +311,10 @@ def check_and_clear_stuck_flags():
             elapsed = time.time() - batch_parse_start_time
             if elapsed > BATCH_OPERATION_TIMEOUT:
                 logger_.error(f"⚠️ STUCK FLAG DETECTED: batch_parse_in_progress has been True for {elapsed:.1f}s (timeout: {BATCH_OPERATION_TIMEOUT}s)")
-                logger_.error("Force-clearing batch_parse_in_progress flag to unstick QueueWorker")
+                logger_.error("System is unresponsive - triggering HARD RESTART to recover")
                 batch_parse_in_progress = False
                 batch_parse_start_time = None
-                cleared_any = True
+                should_restart = True
     
     # Check batch_queue_processing flag
     with batch_queue_processing_lock:
@@ -313,9 +322,17 @@ def check_and_clear_stuck_flags():
             elapsed = time.time() - batch_queue_processing_start_time
             if elapsed > BATCH_OPERATION_TIMEOUT:
                 logger_.error(f"⚠️ STUCK FLAG DETECTED: batch_queue_processing has been True for {elapsed:.1f}s (timeout: {BATCH_OPERATION_TIMEOUT}s)")
-                logger_.error("Force-clearing batch_queue_processing flag to unstick DownloadWorkers")
+                logger_.error("System is unresponsive - triggering HARD RESTART to recover")
                 batch_queue_processing = False
                 batch_queue_processing_start_time = None
-                cleared_any = True
+                should_restart = True
     
-    return cleared_any
+    # Trigger hard restart if any flag was stuck
+    if should_restart and watchdog_restart_callback:
+        try:
+            logger_.error("🔄 WATCHDOG: Executing hard restart due to stuck flags...")
+            watchdog_restart_callback()
+        except Exception as e:
+            logger_.error(f"Watchdog failed to restart: {e}")
+    
+    return should_restart

@@ -33,7 +33,7 @@ except Exception as e:
 from .downloader import DownloadWorker, RetryWorker
 from .otsconfig import cache_dir, config_dir, config
 from .parse_item import parsingworker, parse_url
-from .runtimedata import get_logger, account_pool, pending, download_queue, download_queue_lock, pending_lock, parsing, parsing_lock, register_worker, set_worker_restart_callback
+from .runtimedata import get_logger, account_pool, pending, download_queue, download_queue_lock, pending_lock, parsing, parsing_lock, register_worker, set_worker_restart_callback, set_watchdog_restart_callback
 from . import runtimedata
 from .search import get_search_results
 from .utils import format_bytes
@@ -984,9 +984,14 @@ def main():
             logger.error(f"Failed to restart workers: {e}")
             logger.error("Attempting hard restart as fallback...")
             trigger_hard_restart("soft restart failed")
+    
+    def watchdog_hard_restart():
+        """Hard restart triggered by watchdog for stuck system"""
+        trigger_hard_restart("watchdog detected stuck flags (60s timeout)")
 
-    # Register the restart callback
-    set_worker_restart_callback(restart_workers)
+    # Register the restart callbacks
+    set_worker_restart_callback(restart_workers)  # Soft restart for failure threshold
+    set_watchdog_restart_callback(watchdog_hard_restart)  # Hard restart for stuck flags
 
     # Start initial workers
     start_workers()
