@@ -744,24 +744,7 @@ def restart():
 @login_required
 def get_items():
     with download_queue_lock:
-        # Sort items by album name, then by track number within each album
-        def sort_key(item_tuple):
-            local_id, item = item_tuple
-            album = item.get('album_name', item.get('item_album_name', ''))
-            track = item.get('track_number', 0)
-            # Convert track to int if it's a string
-            if isinstance(track, str):
-                try:
-                    track = int(track)
-                except (ValueError, TypeError):
-                    track = 0
-            logger.info(f"Sort key for {local_id}: album='{album}', track={track}")
-            return (album, track)
-        
-        sorted_items = sorted(download_queue.items(), key=sort_key)
-        # Convert back to dictionary maintaining sort order
-        sorted_queue = {k: v for k, v in sorted_items}
-        return Response(json.dumps(sorted_queue), mimetype='application/json')
+        return Response(json.dumps(download_queue, sort_keys=True), mimetype='application/json')
 
 @app.route('/api/cancel/<path:local_id>', methods=['POST'])
 @login_required
