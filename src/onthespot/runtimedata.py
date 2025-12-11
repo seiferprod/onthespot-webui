@@ -47,6 +47,8 @@ BATCH_OPERATION_TIMEOUT = 60  # 1 minute
 worker_threads = []
 worker_threads_lock = Lock()
 worker_restart_callback = None  # Function to call to restart workers
+worker_restart_lock = Lock()  # Prevent multiple simultaneous restarts
+worker_restart_in_progress = False
 account_consecutive_failures = {}  # Track failures per account index
 consecutive_failures_lock = Lock()
 
@@ -147,8 +149,16 @@ def kill_all_workers():
     logger_.info(f"Pending queue has {pending_count} items before worker restart")
 
     with worker_threads_lock:
+        import threading
+        current_thread = threading.current_thread()
+        
         for worker in worker_threads:
             try:
+                # Skip if trying to stop current thread (causes deadlock)
+                if worker.thread == current_thread if hasattr(worker, 'thread') else False:
+                    logger_.warning(f"Skipping stop of current thread: {worker.__class__.__name__}")
+                    continue
+                    
                 logger_.info(f"Stopping worker: {worker.__class__.__name__}")
                 worker.stop()
             except Exception as e:
@@ -189,18 +199,34 @@ def increment_failure_count(account_index=None):
             account_info = f"account {account_index} ({account_uuid})"
 
     if current_count >= FAILURE_THRESHOLD:
-        logger_.error(f"🚨 CRITICAL: Consecutive failures for {account_info} reached {current_count}, triggering HARD RESTART...")
+        global worker_restart_in_progress
+        
+        # Check if restart already in progress
+        with worker_restart_lock:
+            if worker_restart_in_progress:
+                logger_.warning(f"Restart already in progress, skipping duplicate restart trigger for {account_info}")
+                return
+            worker_restart_in_progress = True
+        
+        try:
+            logger_.error(f"🚨 CRITICAL: Consecutive failures for {account_info} reached {current_count}, triggering HARD RESTART...")
 
-        # Reset all counters before restart to avoid repeated restarts
-        reset_failure_count()
+            # Reset all counters before restart to avoid repeated restarts
+            reset_failure_count()
 
-        # Trigger restart if callback is set
-        if worker_restart_callback:
-            try:
-                logger_.error("Executing hard restart callback now...")
-                worker_restart_callback()
-            except Exception as e:
-                logger_.error(f"Error during worker restart: {e}")
+            # Trigger restart if callback is set
+            if worker_restart_callback:
+                try:
+                    logger_.error("Executing hard restart callback now...")
+                    worker_restart_callback()
+                except Exception as e:
+                    logger_.error(f"Failed to restart workers: {e}\nTraceback: {traceback.format_exc()}")
+        finally:
+            # Clear restart flag after some time
+            import time
+            time.sleep(5)  # Give restart time to complete
+            with worker_restart_lock:
+                worker_restart_in_progress = False
         else:
             logger_.error("No worker restart callback registered!")
     else:
