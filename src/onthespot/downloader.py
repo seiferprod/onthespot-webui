@@ -391,10 +391,11 @@ class DownloadWorker(QObject):
                                 time.sleep(0.2)
                                 continue
                             
-                            # Sort by album name (empty last), then track number
+                            # Sort by playlist number (if playlist item), then album name, then track number
                             available_items.sort(key=lambda x: (
-                                x[1].get('album_name') or '\uffff',  # Empty albums go last
-                                int(x[1].get('track_number') or 9999),  # Tracks without numbers go last
+                                int(x[1].get('playlist_number', 0) or 0) if x[1].get('parent_category') == 'playlist' else 999999,  # Playlist items first, by number
+                                x[1].get('album_name') or '\uffff',  # Then group by album
+                                int(x[1].get('track_number') or 9999),  # Then by track number
                                 x[0]  # Maintain insertion order as tiebreaker
                             ))
                             

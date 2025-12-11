@@ -140,6 +140,9 @@ class QueueWorker(threading.Thread):
                         items_to_process = list(pending.items())
                         pending.clear()
                     
+                    # Sort by playlist number to maintain order
+                    items_to_process.sort(key=lambda x: int(x[1].get('playlist_number', 0) or 0))
+                    
                     logger.info(f"QueueWorker processing {len(items_to_process)} items from pending queue")
                     
                     for local_id, item in items_to_process:
