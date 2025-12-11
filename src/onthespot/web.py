@@ -930,8 +930,26 @@ def main():
         logger.info("All workers started and registered")
 
     def restart_workers():
-        """Hard restart the web process - used when downloads keep failing."""
-        trigger_hard_restart("consecutive download failures threshold reached")
+        """Soft restart of worker threads - keeps web server running"""
+        from .runtimedata import kill_all_workers
+        logger.warning("⚠️ SOFT RESTART: Restarting worker threads due to consecutive download failures")
+        logger.info("Web server will remain available during worker restart")
+        
+        try:
+            # Stop all workers
+            kill_all_workers()
+            
+            # Wait a moment for cleanup
+            time.sleep(1)
+            
+            # Restart workers
+            start_workers()
+            
+            logger.info("✅ Worker threads successfully restarted")
+        except Exception as e:
+            logger.error(f"Failed to restart workers: {e}")
+            logger.error("Attempting hard restart as fallback...")
+            trigger_hard_restart("soft restart failed")
 
     # Register the restart callback
     set_worker_restart_callback(restart_workers)
