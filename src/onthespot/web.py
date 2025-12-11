@@ -119,8 +119,13 @@ class QueueWorker(threading.Thread):
         while self.is_running:
             try:
                 # Wait if parsing is still in progress to allow complete queue population
-                if parsing:
-                    logger.debug(f"QueueWorker waiting: {len(parsing)} items still being parsed")
+                with parsing_lock:
+                    parsing_count = len(parsing)
+                
+                if parsing_count > 0:
+                    with pending_lock:
+                        pending_count = len(pending)
+                    logger.info(f"QueueWorker waiting: {parsing_count} items being parsed, {pending_count} items in pending queue")
                     time.sleep(0.5)
                     continue
                 

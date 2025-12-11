@@ -186,9 +186,11 @@ def parsingworker():
 
                 if current_service == "spotify":
                     if current_type == "playlist":
+                        logger.info(f"Starting to parse playlist: {current_id}")
                         items = spotify_get_playlist_items(token, current_id)
                         playlist_name, playlist_by = spotify_get_playlist_data(token, current_id)
                         total_items = len(items)
+                        logger.info(f"Playlist '{playlist_name}' has {total_items} items, adding to pending queue...")
                         for index, item in enumerate(items):
                             try:
                                 item_id = item['track']['id']
@@ -208,6 +210,7 @@ def parsingworker():
                                         }
                             except TypeError:
                                 logger.error(f'TypeError for {item}')
+                        logger.info(f"Finished adding {total_items} items from playlist '{playlist_name}' to pending queue")
                         continue
                     elif current_type == "liked_songs":
                         tracks = spotify_get_liked_songs(token)
