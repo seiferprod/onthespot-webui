@@ -367,8 +367,18 @@ class DownloadWorker(QObject):
 
 
     def run(self):
+        last_heartbeat = time.time()
+        heartbeat_interval = 60  # Log every 60 seconds
+        
         while self.is_running:
             try:
+                # Periodic heartbeat logging
+                if time.time() - last_heartbeat > heartbeat_interval:
+                    with runtimedata.batch_queue_processing_lock:
+                        is_processing = runtimedata.batch_queue_processing
+                    logger.info(f"DownloadWorker heartbeat: batch_processing={is_processing}, queue_size={len(download_queue)}")
+                    last_heartbeat = time.time()
+                
                 try:
                     # Wait if QueueWorker is batch processing items into download queue
                     with runtimedata.batch_queue_processing_lock:

@@ -135,59 +135,61 @@ class QueueWorker(threading.Thread):
                     with runtimedata.batch_queue_processing_lock:
                         runtimedata.batch_queue_processing = True
                     
-                    # Process all pending items at once
-                    with pending_lock:
-                        items_to_process = list(pending.items())
-                        pending.clear()
-                    
-                    # Sort by playlist number to maintain order
-                    items_to_process.sort(key=lambda x: int(x[1].get('playlist_number', 0) or 0))
-                    
-                    logger.info(f"QueueWorker processing {len(items_to_process)} items from pending queue")
-                    
-                    for local_id, item in items_to_process:
-                        try:
-                            logger.debug(f"QueueWorker processing item: {local_id} (service: {item['item_service']}, type: {item['item_type']})")
-                            token = get_account_token(item['item_service'])
-                            item_metadata = globals()[f"{item['item_service']}_get_{item['item_type']}_metadata"](token, item['item_id'])
-                            if item_metadata:
-                                # Preserve playlist context from pending item
-                                playlist_total = item.get('playlist_total')
-                                logger.debug(f"QueueWorker: Processing {local_id}, pending item keys: {list(item.keys())}, playlist_total={playlist_total}, playlist_number={item.get('playlist_number')}")
-                                
-                                with download_queue_lock:
-                                    download_queue[local_id] = {
-                                        'local_id': local_id,
-                                        'available': True,
-                                        "item_service": item["item_service"],
-                                        "item_type": item["item_type"],
-                                        'item_id': item['item_id'],
-                                        'item_status': 'Waiting',
-                                        "file_path": None,
-                                        "item_name": item_metadata["title"],
-                                        "item_by": item_metadata["artists"],
-                                        'parent_category': item['parent_category'],
-                                        'playlist_name': item.get('playlist_name'),
-                                        'playlist_by': item.get('playlist_by'),
-                                        'playlist_number': item.get('playlist_number'),
-                                        'playlist_total': playlist_total,
-                                        'track_number': item_metadata.get('track_number'),
-                                        'album_name': item_metadata.get('album_name'),
-                                        'item_album_name': item_metadata.get('album_name'),
-                                        'item_thumbnail': item_metadata["image_url"],
-                                        'item_url': item_metadata["item_url"],
-                                        'progress': 0
-                                    }
-                        except Exception as e:
-                            logger.error(f"Error processing {local_id}: {str(e)}\nTraceback: {traceback.format_exc()}")
-                            with pending_lock:
-                                pending[local_id] = item
-                    
-                    logger.info(f"QueueWorker finished processing batch, {len(download_queue)} items now in download queue")
-                    
-                    # Clear flag to allow downloads to start
-                    with runtimedata.batch_queue_processing_lock:
-                        runtimedata.batch_queue_processing = False
+                    try:
+                        # Process all pending items at once
+                        with pending_lock:
+                            items_to_process = list(pending.items())
+                            pending.clear()
+                        
+                        # Sort by playlist number to maintain order
+                        items_to_process.sort(key=lambda x: int(x[1].get('playlist_number', 0) or 0))
+                        
+                        logger.info(f"QueueWorker processing {len(items_to_process)} items from pending queue")
+                        
+                        for local_id, item in items_to_process:
+                            try:
+                                logger.debug(f"QueueWorker processing item: {local_id} (service: {item['item_service']}, type: {item['item_type']})")
+                                token = get_account_token(item['item_service'])
+                                item_metadata = globals()[f"{item['item_service']}_get_{item['item_type']}_metadata"](token, item['item_id'])
+                                if item_metadata:
+                                    # Preserve playlist context from pending item
+                                    playlist_total = item.get('playlist_total')
+                                    logger.debug(f"QueueWorker: Processing {local_id}, pending item keys: {list(item.keys())}, playlist_total={playlist_total}, playlist_number={item.get('playlist_number')}")
+                                    
+                                    with download_queue_lock:
+                                        download_queue[local_id] = {
+                                            'local_id': local_id,
+                                            'available': True,
+                                            "item_service": item["item_service"],
+                                            "item_type": item["item_type"],
+                                            'item_id': item['item_id'],
+                                            'item_status': 'Waiting',
+                                            "file_path": None,
+                                            "item_name": item_metadata["title"],
+                                            "item_by": item_metadata["artists"],
+                                            'parent_category': item['parent_category'],
+                                            'playlist_name': item.get('playlist_name'),
+                                            'playlist_by': item.get('playlist_by'),
+                                            'playlist_number': item.get('playlist_number'),
+                                            'playlist_total': playlist_total,
+                                            'track_number': item_metadata.get('track_number'),
+                                            'album_name': item_metadata.get('album_name'),
+                                            'item_album_name': item_metadata.get('album_name'),
+                                            'item_thumbnail': item_metadata["image_url"],
+                                            'item_url': item_metadata["item_url"],
+                                            'progress': 0
+                                        }
+                            except Exception as e:
+                                logger.error(f"Error processing {local_id}: {str(e)}\nTraceback: {traceback.format_exc()}")
+                                with pending_lock:
+                                    pending[local_id] = item
+                        
+                        logger.info(f"QueueWorker finished processing batch, {len(download_queue)} items now in download queue")
+                    finally:
+                        # Always clear flag to allow downloads to start
+                        with runtimedata.batch_queue_processing_lock:
+                            runtimedata.batch_queue_processing = False
+                            logger.debug("Cleared batch_queue_processing flag")
                 else:
                     time.sleep(0.2)
             except Exception as e:
