@@ -1036,7 +1036,7 @@ def main():
     # Start initial workers
     start_workers()
 
-    fill_account_pool.wait()
+    fill_account_pool.join()  # Wait for account pool to finish loading
 
     # Check account pool status and retry failed accounts before loading cached queue
     max_retries = 3
