@@ -1338,10 +1338,13 @@ class DownloadWorker:
                             embed_metadata(item, item_metadata)
 
                             # Thumbnail
+                            logger.debug(f"Checking thumbnail settings: save_album_cover={config.get('save_album_cover')}, embed_cover={config.get('embed_cover')}")
                             if config.get('save_album_cover') or config.get('embed_cover'):
                                 item['item_status'] = 'Setting Thumbnail'
                                 self.update_progress(item, "Setting Thumbnail", 99)
                                 set_music_thumbnail(file_path, item_metadata)
+                            else:
+                                logger.info("Skipping thumbnail: both save_album_cover and embed_cover are disabled")
 
                             if os.path.splitext(file_path)[1] == '.mp3':
                                 fix_mp3_metadata(file_path)
