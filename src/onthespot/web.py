@@ -807,6 +807,18 @@ def get_notifications():
         system_notifications.clear()
     return jsonify(notifications=notifications)
 
+@app.route('/api/test_notification', methods=['POST'])
+@login_required
+def test_notification():
+    """Test endpoint to manually trigger a notification"""
+    with system_notifications_lock:
+        system_notifications.append({
+            'timestamp': time.time(),
+            'message': 'Test notification - system is working!',
+            'type': 'success'
+        })
+    return jsonify(success=True)
+
 
 @app.route('/api/delete/<path:local_id>', methods=['DELETE'])
 @login_required

@@ -1101,8 +1101,7 @@
                     }
                 })
                 .catch(error => {
-                    console.error('Error fetching download queue:', error);
-                    scheduleFetch();
+                    console.error('Error fetching notifications:', error);
                 });
         }
 
@@ -1180,5 +1179,11 @@
             fetchItems();
         };
     </script>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <span class="toast-icon"></span>
+        <span class="toast-message"></span>
+    </div>
 </body>
 </html>
