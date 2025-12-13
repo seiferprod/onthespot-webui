@@ -89,7 +89,9 @@
 
         /* Status bar card */
         .status-bar {
-            background: linear-gradient(135deg, rgba(76, 175, 80, 0.12) 0%, rgba(34, 197, 94, 0.08) 50%, rgba(76, 175, 80, 0.05) 100%);
+            background: linear-gradient(to right, rgba(76, 175, 80, 0.15) 0%, rgba(34, 197, 94, 0.1) 100%) no-repeat left center,
+                        linear-gradient(135deg, rgba(76, 175, 80, 0.12) 0%, rgba(34, 197, 94, 0.08) 50%, rgba(76, 175, 80, 0.05) 100%);
+            background-size: 0% 100%, 100% 100%;
             border: 1px solid rgba(76, 175, 80, 0.3);
             border-radius: 16px;
             padding: 20px 24px;
@@ -98,6 +100,7 @@
                         inset 0 1px 0 rgba(255, 255, 255, 0.05);
             position: relative;
             overflow: hidden;
+            transition: background-size 0.3s ease-out;
         }
         
         .status-bar::before {
@@ -109,6 +112,7 @@
             height: 100%;
             background: linear-gradient(90deg, transparent, rgba(76, 175, 80, 0.1), transparent);
             animation: shimmer 3s infinite;
+            z-index: 1;
         }
         
         @keyframes shimmer {
@@ -122,6 +126,8 @@
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 12px;
+            position: relative;
+            z-index: 2;
         }
 
         .status-info {
@@ -1271,6 +1277,12 @@
             
             const percent = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
             document.getElementById('queue-status-message').textContent = `${completed}/${total} completed • ${percent}%`;
+            
+            // Update global progress bar background
+            const statusBar = document.querySelector('.status-bar');
+            if (statusBar) {
+                statusBar.style.backgroundSize = `${percent}% 100%, 100% 100%`;
+            }
         }
 
         // ============= WEBSOCKET CONNECTION =============
