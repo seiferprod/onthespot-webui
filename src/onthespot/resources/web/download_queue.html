@@ -798,7 +798,8 @@
 
         function getAlbumName(item) {
             // Prioritize playlist_name for proper grouping, fall back to album name
-            return item.playlist_name ?? item.album_name ?? item.item_album_name ?? '';
+            // Use || instead of ?? to treat empty strings as falsy
+            return item.playlist_name || item.album_name || item.item_album_name || '';
         }
 
         function sortItems(items) {
@@ -1083,14 +1084,6 @@
             const albumCell = document.createElement('td');
             albumCell.className = 'col-album hide-on-mobile';
             const albumName = getAlbumName(item);
-            // Debug: check what properties exist
-            if (!albumName && item.item_id) {
-                console.log('Album name missing for item:', item.item_id, 
-                    'playlist_name:', item.playlist_name, 
-                    'album_name:', item.album_name, 
-                    'item_album_name:', item.item_album_name,
-                    'all keys:', Object.keys(item));
-            }
             albumCell.textContent = albumName ? (albumName.length > 20 ? albumName.substring(0, 20) + '...' : albumName) : 'N/A';
             albumCell.title = albumName;
             row.appendChild(albumCell);
