@@ -432,6 +432,17 @@ class DownloadWorker:
                 # Get account index for failure tracking
                 account_index = self._find_account_index(item_service, token) if token else None
 
+                # For Spotify albums, acquire album lock BEFORE metadata fetch to serialize track_number lookup
+                album_lock = None
+                if item_service == "spotify" and item.get('parent_category') == 'album':
+                    album_key = f"{item_service}:{item.get('item_id', item_id)}"  # Use item_id as temp album_id
+                    with album_download_locks_lock:
+                        if album_key not in album_download_locks:
+                            album_download_locks[album_key] = threading.Lock()
+                        album_lock = album_download_locks[album_key]
+                    album_lock.acquire()
+                    logger.debug(f"Acquired album lock for metadata fetch: {album_key}")
+
                 try:
                     item_metadata = globals()[f"{item_service}_get_{item_type}_metadata"](token, item_id)
 
@@ -444,7 +455,16 @@ class DownloadWorker:
                         item_metadata.update({'track_number': item['playlist_number']})
 
                     item_path = format_item_path(item, item_metadata)
+                    
+                    # Release album lock after metadata is fetched (will reacquire for stream)
+                    if album_lock:
+                        album_lock.release()
+                        album_lock = None
+                        logger.debug(f"Released album lock after metadata fetch")
                 except (Exception, KeyError) as e:
+                    if album_lock:
+                        album_lock.release()
+                        album_lock = None
                     logger.error(f"Failed to fetch metadata for '{item_id}', Error: {str(e)}\nTraceback: {traceback.format_exc()}")
                     item['item_status'] = "Failed"
                     self.update_progress(item, "Failed", 0)
@@ -577,20 +597,29 @@ class DownloadWorker:
                         while download_retry_count < max_download_retries and not download_successful:
                             stream = None  # Initialize for finally block
                             try:
-                                # Get album-specific lock to serialize stream initialization from same album
-                                album_key = f"{item_service}:{item_metadata.get('album_id', item_id)}"
-                                with album_download_locks_lock:
-                                    if album_key not in album_download_locks:
-                                        album_download_locks[album_key] = threading.Lock()
-                                    album_lock = album_download_locks[album_key]
-                                
-                                # Acquire album lock only for stream initialization (brief critical section)
-                                logger.debug(f"Waiting for album lock: {album_key}")
-                                with album_lock:
-                                    logger.debug(f"Acquired album lock, getting stream: {album_key}")
-                                    # Get stream (with account fallback)
+                                # For Spotify albums, reacquire album lock for stream acquisition
+                                # For non-album items, no lock needed
+                                if item.get('parent_category') == 'album':
+                                    album_key = f"{item_service}:{item_metadata.get('album_id', item_id)}"
+                                    with album_download_locks_lock:
+                                        if album_key not in album_download_locks:
+                                            album_download_locks[album_key] = threading.Lock()
+                                        album_lock = album_download_locks[album_key]
+                                    
+                                    # Acquire album lock for stream initialization
+                                    logger.debug(f"Reacquiring album lock for stream: {album_key}")
+                                    album_lock.acquire()
+                                    try:
+                                        logger.debug(f"Acquired album lock, getting stream: {album_key}")
+                                        # Get stream (with account fallback)
+                                        stream, token, _ = self._try_get_spotify_stream(item, item_id, item_type, token, quality)
+                                        logger.debug(f"Stream acquired, released lock: {album_key}")
+                                    finally:
+                                        album_lock.release()
+                                        album_lock = None
+                                else:
+                                    # Non-album items don't need locking
                                     stream, token, _ = self._try_get_spotify_stream(item, item_id, item_type, token, quality)
-                                    logger.debug(f"Stream acquired, released lock: {album_key}")
 
                                 # Validate stream is working with initial test read
                                 stall_timeout = config.get("download_stall_timeout")
