@@ -450,6 +450,15 @@
                 padding-bottom: 80px;
             }
 
+            /* Show mobile thumbnail column, hide desktop thumbnail and track number */
+            .mobile-thumbnail-col {
+                display: table-cell !important;
+            }
+
+            .col-track {
+                display: none !important;
+            }
+
             .status-bar {
                 padding: 12px;
             }
@@ -651,6 +660,7 @@
                         {% if config.show_download_thumbnails %}
                         <col style="width: 60px;"> <!-- Thumbnail -->
                         {% endif %}
+                        <col class="mobile-thumbnail-col" style="width: 50px; display: none;"> <!-- Mobile Thumbnail -->
                         <col style="width: 50px;"> <!-- # -->
                         <col> <!-- Name - flexible -->
                         <col class="hide-on-mobile" style="width: 15%;"> <!-- Album -->
@@ -666,6 +676,7 @@
                             {% if config.show_download_thumbnails %}
                             <th></th>
                             {% endif %}
+                            <th class="mobile-thumbnail-col" style="display: none;"></th>
                             <th class="col-track" data-sort="track_number">#</th>
                             <th class="col-name" data-sort="item_name">Name</th>
                             <th class="col-album hide-on-mobile" data-sort="album_name">Album</th>
@@ -989,7 +1000,7 @@
             idCell.dataset.localId = item.local_id;
             row.appendChild(idCell);
 
-            // Thumbnail
+            // Thumbnail (desktop)
             if (config.show_download_thumbnails) {
                 const imgCell = document.createElement('td');
                 if (item.item_thumbnail) {
@@ -1006,6 +1017,24 @@
                 }
                 row.appendChild(imgCell);
             }
+
+            // Mobile Thumbnail (always show on mobile)
+            const mobileImgCell = document.createElement('td');
+            mobileImgCell.className = 'mobile-thumbnail-col';
+            mobileImgCell.style.display = 'none';
+            if (item.item_thumbnail) {
+                const img = document.createElement('img');
+                img.src = item.item_thumbnail;
+                img.className = 'item-thumbnail';
+                img.loading = 'lazy';
+                img.style.width = '40px';
+                img.style.height = '40px';
+                img.onclick = function(e) { toggleImagePreview(item.item_thumbnail, e.target); };
+                mobileImgCell.appendChild(img);
+            } else {
+                mobileImgCell.innerHTML = '';
+            }
+            row.appendChild(mobileImgCell);
 
             // Track number
             const trackCell = document.createElement('td');
