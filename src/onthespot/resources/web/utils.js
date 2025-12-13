@@ -1,4 +1,20 @@
 // utils.js
+
+// Mobile Menu Toggle
+function toggleMobileMenu(event) {
+    event.preventDefault();
+    const menu = document.getElementById('mobileMenu');
+    menu.classList.toggle('show');
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', function closeMenu(e) {
+        if (!e.target.closest('.mobile-menu-btn') && !e.target.closest('.mobile-menu')) {
+            menu.classList.remove('show');
+            document.removeEventListener('click', closeMenu);
+        }
+    });
+}
+
 function capitalizeFirstLetter(string) {
     if (!string) return 'N/A';
     return string.charAt(0).toUpperCase() + string.slice(1);

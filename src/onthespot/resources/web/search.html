@@ -681,9 +681,14 @@
             <li><a href="/download_queue">Downloads</a></li>
             <li><a href="/plex_playlists">Plex</a></li>
             {% if user and user.is_admin %}<li><a href="/settings">Settings</a></li>{% endif %}
-            <li><a href="/about">About</a></li>
-            <li style="float: right;"><a href="/api/logout" style="color: #e74c3c;">Logout</a></li>
+            <li class="mobile-hidden"><a href="/about">About</a></li>
+            <li class="mobile-hidden" style="float: right;"><a href="/api/logout" style="color: #e74c3c;">Logout</a></li>
+            <li class="mobile-menu-btn"><a href="#" onclick="toggleMobileMenu(event)">⋯</a></li>
         </ul>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/about">About</a>
+            <a href="/api/logout" style="color: #e74c3c;">Logout</a>
+        </div>
     </div>
 
     <div class="container">

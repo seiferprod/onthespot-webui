@@ -136,6 +136,90 @@ body {
     opacity: 0;
 }
 
+/* ============= MOBILE MENU ============= */
+.mobile-hidden {
+    display: inline-block;
+}
+
+.mobile-menu-btn {
+    display: none;
+}
+
+.mobile-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 12px;
+    background: rgba(30, 30, 30, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(76, 175, 80, 0.2);
+    border-radius: 12px;
+    padding: 8px 0;
+    margin-top: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 101;
+    min-width: 140px;
+}
+
+.mobile-menu.show {
+    display: block;
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mobile-menu a {
+    display: block;
+    padding: 12px 20px;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    border-radius: 0;
+}
+
+.mobile-menu a:hover {
+    background: rgba(76, 175, 80, 0.15);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.mobile-menu a.active {
+    color: #4caf50;
+}
+
+@media (max-width: 768px) {
+    .mobile-hidden {
+        display: none !important;
+    }
+    
+    .mobile-menu-btn {
+        display: inline-block;
+        margin-left: auto;
+    }
+    
+    .mobile-menu-btn a {
+        font-size: 20px;
+        padding: 8px 16px;
+    }
+    
+    .header {
+        position: relative;
+    }
+}
+
 /* ============= BUTTONS ============= */
 button {
     padding: 12px 20px;

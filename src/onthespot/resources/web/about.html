@@ -15,15 +15,14 @@
                 <li><a href="/download_queue">Downloads</a></li>
                 <li><a href="/plex_playlists">Plex</a></li>
                 {% if user and user.is_admin %}<li><a href="/settings">Settings</a></li>{% endif %}
-                <li><a class="active" href="/about">About</a></li>
-                <li style="float: right;"><a href="/api/logout" style="color: #e74c3c;">Logout</a></li>
-            </ul>
+            <li class="mobile-hidden"><a class="active" href="/about">About</a></li>
+            <li class="mobile-hidden" style="float: right;"><a href="/api/logout" style="color: #e74c3c;">Logout</a></li>
+            <li class="mobile-menu-btn"><a href="#" onclick="toggleMobileMenu(event)">⋯</a></li>
+        </ul>
+        <div class="mobile-menu" id="mobileMenu">
+            <a class="active" href="/about">About</a>
+            <a href="/api/logout" style="color: #e74c3c;">Logout</a>
         </div>
-
-        <br>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
-            <div style="display: flex; align-items: center;">
-                <p style="margin-right: 15px; margin-left: 15px;">Version: {{ version }}</p>
                 <p>|</p>
                 <p style="margin-right: 5px; margin-left: 15px;">Total Downloads: {{ statistics }}</p>
             </div>
