@@ -577,19 +577,20 @@ class DownloadWorker:
                         while download_retry_count < max_download_retries and not download_successful:
                             stream = None  # Initialize for finally block
                             try:
-                                # Get album-specific lock to prevent concurrent stream initialization from same album
+                                # Get album-specific lock to serialize stream initialization from same album
                                 album_key = f"{item_service}:{item_metadata.get('album_id', item_id)}"
                                 with album_download_locks_lock:
                                     if album_key not in album_download_locks:
                                         album_download_locks[album_key] = threading.Lock()
                                     album_lock = album_download_locks[album_key]
                                 
-                                # Acquire album lock for stream initialization to prevent race conditions
+                                # Acquire album lock only for stream initialization (brief critical section)
+                                logger.debug(f"Waiting for album lock: {album_key}")
                                 with album_lock:
-                                    logger.debug(f"Acquired album lock for {album_key}")
+                                    logger.debug(f"Acquired album lock, getting stream: {album_key}")
                                     # Get stream (with account fallback)
                                     stream, token, _ = self._try_get_spotify_stream(item, item_id, item_type, token, quality)
-                                    logger.debug(f"Stream acquired, releasing album lock for {album_key}")
+                                    logger.debug(f"Stream acquired, released lock: {album_key}")
 
                                 # Validate stream is working with initial test read
                                 stall_timeout = config.get("download_stall_timeout")
