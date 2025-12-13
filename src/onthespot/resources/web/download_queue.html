@@ -273,11 +273,27 @@
             max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
+            position: relative;
         }
 
         .status-downloading {
             background: rgba(59, 130, 246, 0.2);
             color: #60a5fa;
+            overflow: visible;
+        }
+
+        /* Progress bar fill for downloading badge */
+        .status-badge.status-downloading::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, var(--accent) 0%, #66bb6a 100%);
+            border-radius: 20px;
+            transition: width 0.3s ease-out;
+            z-index: -1;
+            width: var(--progress, 0%);
         }
 
         .status-waiting {
@@ -905,17 +921,21 @@
                 const progressCell = row.querySelector('[data-cell="progress"]');
                 const actionCell = row.querySelector('[data-cell="action"]');
 
-                // Update status badge only if changed
+                // Update status badge and progress
                 if (statusCell) {
                     const statusBadge = statusCell.querySelector('.status-badge');
                     const currentStatus = statusBadge?.textContent?.trim();
                     const newStatus = newItem.item_status === 'Already Exists' ? 'Exists' : newItem.item_status;
+                    const newProgress = newItem.progress || 0;
 
                     if (currentStatus !== newStatus) {
-                        statusCell.innerHTML = createStatusBadge(newItem.item_status);
+                        statusCell.innerHTML = createStatusBadge(newItem.item_status, newProgress);
                         if (actionCell) {
                             actionCell.innerHTML = createActionButtons(newItem);
                         }
+                    } else if (newItem.item_status === 'Downloading' && statusBadge) {
+                        // Update progress for downloading items
+                        statusBadge.style.setProperty('--progress', `${newProgress}%`);
                     }
                 }
 
@@ -1015,7 +1035,7 @@
             updateProgressHeader();
         }
 
-        function createStatusBadge(status) {
+        function createStatusBadge(status, progress = 0) {
             const statusClasses = {
                 'Downloading': 'status-downloading',
                 'Waiting': 'status-waiting',
@@ -1027,6 +1047,12 @@
             };
             const className = statusClasses[status] || '';
             const displayText = status === 'Already Exists' ? 'Exists' : status;
+            
+            // Add progress for downloading status
+            if (status === 'Downloading') {
+                return `<span class="status-badge ${className}" style="--progress: ${progress}%">${displayText || 'N/A'}</span>`;
+            }
+            
             return `<span class="status-badge ${className}">${displayText || 'N/A'}</span>`;
         }
 
@@ -1137,7 +1163,8 @@
             const statusCell = document.createElement('td');
             statusCell.className = 'col-status';
             statusCell.dataset.cell = 'status';
-            statusCell.innerHTML = createStatusBadge(item.item_status);
+            const progress = item.progress || 0;
+            statusCell.innerHTML = createStatusBadge(item.item_status, progress);
             row.appendChild(statusCell);
 
             // Progress bar
