@@ -937,16 +937,45 @@
 
         // ============= TABLE RENDERING =============
         function renderTable(forceRebuild = false) {
+            const tableBody = document.getElementById('download-queue-table');
+            const itemsArray = Object.values(currentData);
+            
+            // Show empty state if queue is actually empty (no items at all)
+            if (itemsArray.length === 0) {
+                tableBody.innerHTML = '';
+                const headerCells = document.querySelectorAll('thead th');
+                let visibleColumnCount = 0;
+                headerCells.forEach(th => {
+                    const style = window.getComputedStyle(th);
+                    if (style.display !== 'none') {
+                        visibleColumnCount++;
+                    }
+                });
+
+                const emptyRow = document.createElement('tr');
+                const emptyCell = document.createElement('td');
+                emptyCell.colSpan = visibleColumnCount || 10;
+                emptyCell.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📥</div>
+                        <h3>No downloads yet</h3>
+                        <p>Search for music to start downloading</p>
+                    </div>
+                `;
+                emptyRow.appendChild(emptyCell);
+                tableBody.appendChild(emptyRow);
+                lastRenderedIds = [];
+                updateProgressHeader();
+                return;
+            }
+            
             if (!forceRebuild && !needsFullRebuild(currentData)) {
                 updateExistingRows(currentData);
                 updateProgressHeader();
                 return;
             }
 
-            const tableBody = document.getElementById('download-queue-table');
             tableBody.innerHTML = '';
-
-            const itemsArray = Object.values(currentData);
             const filteredItems = itemsArray.filter(shouldShowItem);
             sortItems(filteredItems);
 
