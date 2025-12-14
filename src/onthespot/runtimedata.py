@@ -293,6 +293,39 @@ def set_watchdog_restart_callback(callback):
     logger_.info(f"Watchdog restart callback registered: {callback.__name__}")
 
 
+def trigger_worker_restart():
+    """Manually trigger a worker restart (called by watchdog when download is stuck)"""
+    global watchdog_restart_callback, worker_restart_in_progress
+    
+    # Check if restart already in progress
+    with worker_restart_lock:
+        if worker_restart_in_progress:
+            logger_.warning("Restart already in progress, skipping duplicate watchdog trigger")
+            return
+        worker_restart_in_progress = True
+    
+    try:
+        logger_.error("🚨 WATCHDOG: Triggering hard worker restart due to stuck download...")
+        
+        # Reset all failure counters
+        reset_failure_count()
+        
+        # Trigger hard restart if callback is set
+        if watchdog_restart_callback:
+            try:
+                watchdog_restart_callback()
+            except Exception as e:
+                logger_.error(f"Failed to restart workers: {e}")
+        else:
+            logger_.error("No watchdog restart callback registered!")
+    finally:
+        # Clear restart flag after some time
+        import time
+        time.sleep(5)
+        with worker_restart_lock:
+            worker_restart_in_progress = False
+
+
 def set_batch_parse_flag(value):
     """Set batch_parse_in_progress flag with timestamp tracking"""
     import time

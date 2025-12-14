@@ -360,8 +360,8 @@ class DownloadWorker:
         last_heartbeat = time.time()
         heartbeat_interval = 60  # Log every 60 seconds
         last_watchdog_check = time.time()
-        watchdog_interval = 120  # Check for stuck downloads every 2 minutes
-        stuck_timeout = 300  # Consider a download stuck after 5 minutes
+        watchdog_interval = 30  # Check for stuck downloads every 30 seconds
+        stuck_timeout = 60  # Consider a download stuck after 1 minute
         
         while self.is_running:
             try:
@@ -372,20 +372,26 @@ class DownloadWorker:
                     logger.info(f"DownloadWorker heartbeat: batch_processing={is_processing}, queue_size={len(download_queue)}")
                     last_heartbeat = time.time()
                 
-                # Watchdog: Check for stuck downloads
+                # Watchdog: Check for stuck downloads and trigger hard restart
                 if time.time() - last_watchdog_check > watchdog_interval:
+                    stuck_detected = False
                     with download_queue_lock:
                         current_time = time.time()
                         for local_id, item in download_queue.items():
                             # Check if item has been in "Downloading" state for too long
                             if item['item_status'] == 'Downloading':
-                                # Use last_update_time if available, otherwise fall back to checking progress
                                 last_update = item.get('last_update_time', 0)
                                 if current_time - last_update > stuck_timeout:
-                                    logger.warning(f"Watchdog detected stuck download: {item.get('item_name', 'Unknown')} (stuck for {int(current_time - last_update)}s), resetting to Waiting...")
-                                    item['item_status'] = 'Waiting'
-                                    item['available'] = True
-                                    item['progress'] = 0
+                                    logger.error(f"⚠️ WATCHDOG ALERT: Download stuck for {int(current_time - last_update)}s: {item.get('item_name', 'Unknown')} - triggering hard worker restart!")
+                                    stuck_detected = True
+                                    break
+                    
+                    if stuck_detected:
+                        # Trigger hard restart of workers
+                        from .runtimedata import trigger_worker_restart
+                        trigger_worker_restart()
+                        return  # Exit this worker thread
+                    
                     last_watchdog_check = time.time()
                 
                 try:
