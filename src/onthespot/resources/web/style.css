@@ -317,7 +317,7 @@ tr:nth-child(even) {
     background-color: var(--row-even);
 }
 
-tr:hover {
+tr:hover:not(:has(.empty-state)) {
     background-color: rgba(76, 175, 80, 0.08);
 }
 
