@@ -20,6 +20,54 @@ BASE_URL = "https://api.spotify.com/v1"
 _album_track_ids_cache = {}
 _album_track_ids_cache_lock = threading.Lock()
 
+
+def _spotify_extract_year(value):
+    if not value:
+        return None
+    match = re.search(r'(\d{4})', str(value))
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def spotify_get_playlist_updated_year(headers, playlist_id, tracks_total):
+    """Best-effort playlist "updated year" based on newest track `added_at`.
+
+    Spotify playlist objects don't expose an explicit last-updated timestamp.
+    This approximates it by sampling `added_at` from the first and last track.
+    """
+    if not isinstance(tracks_total, int) or tracks_total <= 0:
+        return None
+
+    def _fetch_added_at(offset):
+        resp = make_call(
+            f"{BASE_URL}/playlists/{playlist_id}/tracks",
+            params={
+                'offset': str(max(0, offset)),
+                'limit': '1',
+                'fields': 'items(added_at)'
+            },
+            headers=headers,
+            skip_cache=True,
+        )
+        if not resp or not resp.get('items'):
+            return None
+        return resp['items'][0].get('added_at')
+
+    first_added_at = _fetch_added_at(0)
+    last_added_at = _fetch_added_at(tracks_total - 1)
+
+    years = []
+    for added_at in (first_added_at, last_added_at):
+        year = _spotify_extract_year(added_at)
+        if year is not None:
+            years.append(year)
+
+    return str(max(years)) if years else None
+
 def clear_album_track_ids_cache():
     """Clear the album track IDs cache to free memory."""
     with _album_track_ids_cache_lock:
@@ -756,6 +804,7 @@ def spotify_get_search_results(token, search_term, content_types, _retry=False):
     data = requests.get(f"{BASE_URL}/search", params=params, headers=headers).json()
 
     search_results = []
+    playlist_year_cache = {}
     for key in data.keys():
         for item in data[key]["items"]:
             item_type = item['type']
@@ -769,7 +818,17 @@ def spotify_get_search_results(token, search_term, content_types, _retry=False):
                 item_by = f"{config.get('metadata_separator').join([artist['name'] for artist in item['artists']])}"
                 item_thumbnail_url = item['images'][-1]["url"] if len(item['images']) > 0 else ""
             elif item_type == "playlist":
-                item_name = f"{item['name']}"
+                tracks_total = item.get('tracks', {}).get('total')
+                if isinstance(tracks_total, int):
+                    playlist_id = item['id']
+                    if playlist_id in playlist_year_cache:
+                        rel_year = playlist_year_cache[playlist_id]
+                    else:
+                        rel_year = spotify_get_playlist_updated_year(headers, playlist_id, tracks_total)
+                        playlist_year_cache[playlist_id] = rel_year
+                    item_name = f"[Y:{rel_year or '????'}] [T:{tracks_total}] {item['name']}"
+                else:
+                    item_name = f"{item['name']}"
                 item_by = f"{item['owner']['display_name']}"
                 item_thumbnail_url = item['images'][-1]["url"] if len(item['images']) > 0 else ""
             elif item_type == "artist":
@@ -867,7 +926,12 @@ def spotify_get_item_by_id(token, item_id, item_type, _retry=False):
             item_by = f"{config.get('metadata_separator').join([artist['name'] for artist in item['artists']])}"
             item_thumbnail_url = item['images'][-1]["url"] if len(item['images']) > 0 else ""
         elif item_type == "playlist":
-            item_name = f"{item['name']}"
+            tracks_total = item.get('tracks', {}).get('total')
+            if isinstance(tracks_total, int):
+                rel_year = spotify_get_playlist_updated_year(headers, item['id'], tracks_total)
+                item_name = f"[Y:{rel_year or '????'}] [T:{tracks_total}] {item['name']}"
+            else:
+                item_name = f"{item['name']}"
             item_by = f"{item['owner']['display_name']}"
             item_thumbnail_url = item['images'][-1]["url"] if len(item['images']) > 0 else ""
         elif item_type == "artist":
