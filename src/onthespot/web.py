@@ -48,7 +48,11 @@ def _cache_download_queue_to_disk():
     """Persist the current download queue so the new process can resume it."""
     import json
     cached_path = os.path.join(cache_dir(), 'cached_download_queue.json')
-    with download_queue_lock:
+    # Never block forever here: hard restart must remain possible even if the queue lock is stuck.
+    lock_acquired = download_queue_lock.acquire(timeout=3)
+    if not lock_acquired:
+        raise TimeoutError("Timed out acquiring download_queue_lock while caching queue")
+    try:
         # Save essential metadata to preserve playlist context
         items_to_cache = []
         for item in download_queue.values():
@@ -65,6 +69,8 @@ def _cache_download_queue_to_disk():
             })
         with open(cached_path, 'w') as file:
             json.dump(items_to_cache, file, indent=2)
+    finally:
+        download_queue_lock.release()
     return cached_path
 
 
@@ -85,10 +91,20 @@ def trigger_hard_restart(reason):
     logger.error(f"🔄 HARD RESTART INITIATED: {reason}")
     logger.error("="*80)
 
+    # Notify web clients so the UI can show a reconnecting state immediately.
+    try:
+        if 'socketio' in globals():
+            socketio.emit('hard_restart', {'reason': reason}, namespace='/')
+            # Give the event a brief chance to flush before process exit.
+            time.sleep(0.15)
+    except Exception as e:
+        logger.error(f"Failed to emit hard_restart websocket event: {e}")
+
     try:
         cached_path = _cache_download_queue_to_disk()
         logger.info(f"Cached download queue to {cached_path}")
     except Exception as e:
+        # Caching is best-effort; do not let it prevent restart.
         logger.error(f"Failed to cache download queue before restart: {e}")
 
     try:
@@ -226,8 +242,10 @@ class QueueWorker(threading.Thread):
 
 class WatchdogWorker(threading.Thread):
     """
-    Worker that monitors for stuck batch operation flags and clears them automatically.
-    Checks every 30 seconds for flags that have been stuck longer than timeout.
+    Worker that monitors for stuck batch operation flags and stuck downloads.
+    Checks every 30 seconds for:
+    1. Batch operation flags that have been stuck longer than timeout
+    2. Downloads stuck in "Downloading" state without progress updates
     """
     def __init__(self):
         super().__init__()
@@ -235,6 +253,8 @@ class WatchdogWorker(threading.Thread):
 
     def run(self):
         logger.info('WatchdogWorker started')
+        stuck_timeout = 90  # Consider a download stuck after 90 seconds without updates
+        
         while self.is_running:
             try:
                 time.sleep(30)  # Check every 30 seconds
@@ -243,6 +263,30 @@ class WatchdogWorker(threading.Thread):
                 from .runtimedata import check_and_clear_stuck_flags
                 if check_and_clear_stuck_flags():
                     logger.warning("Watchdog cleared stuck flags - workers should resume")
+                
+                # Check for stuck downloads
+                stuck_detected = False
+                lock_acquired = download_queue_lock.acquire(timeout=2)
+                if not lock_acquired:
+                    logger.error("⚠️ WATCHDOG ALERT: download_queue_lock could not be acquired (possible deadlock)")
+                    stuck_detected = True
+                else:
+                    try:
+                        current_time = time.time()
+                        for local_id, item in download_queue.items():
+                            # Check if item has been in "Downloading" state for too long without updates
+                            if item['item_status'] == 'Downloading':
+                                last_update = item.get('last_update_time', 0)
+                                if last_update > 0 and current_time - last_update > stuck_timeout:
+                                    logger.error(f"⚠️ WATCHDOG ALERT: Download stuck for {int(current_time - last_update)}s without progress: {item.get('item_name', 'Unknown')} (ID: {local_id})")
+                                    stuck_detected = True
+                                    break
+                    finally:
+                        download_queue_lock.release()
+                
+                if stuck_detected:
+                    logger.error("🚨 WATCHDOG: Triggering hard restart due to stuck download...")
+                    trigger_hard_restart("watchdog detected stuck download")
                     
             except Exception as e:
                 logger.error(f"Error in WatchdogWorker: {e}\nTraceback: {traceback.format_exc()}")

@@ -944,6 +944,13 @@
             return false;
         }
 
+        // ============= RESTART/RECONNECT UI STATE =============
+        let hardRestartInProgress = false;
+
+        function isReconnectingState(itemStatus) {
+            return hardRestartInProgress && itemStatus === 'Downloading';
+        }
+
         function updateExistingRows(newData) {
             const tableBody = document.getElementById('download-queue-table');
             const rows = tableBody.querySelectorAll('tr');
@@ -964,7 +971,8 @@
                 if (statusCell) {
                     const statusBadge = statusCell.querySelector('.status-badge');
                     const currentStatus = statusBadge?.textContent?.trim();
-                    const newStatus = newItem.item_status === 'Already Exists' ? 'Exists' : newItem.item_status;
+                    const effectiveStatus = isReconnectingState(newItem.item_status) ? 'Reconnecting' : newItem.item_status;
+                    const newStatus = effectiveStatus === 'Already Exists' ? 'Exists' : effectiveStatus;
                     const newProgress = newItem.progress || 0;
 
                     if (currentStatus !== newStatus) {
@@ -987,7 +995,14 @@
                         const newWidth = `${newProgress}%`;
                         if (currentWidth !== newWidth) {
                             progressBar.style.width = newWidth;
-                            progressBar.textContent = newWidth;
+                            progressBar.textContent = isReconnectingState(newItem.item_status) ? 'Reconnecting…' : newWidth;
+                        }
+                        // If width didn't change but restart state did, still update label.
+                        if (currentWidth === newWidth) {
+                            const desiredLabel = isReconnectingState(newItem.item_status) ? 'Reconnecting…' : newWidth;
+                            if (progressBar.textContent !== desiredLabel) {
+                                progressBar.textContent = desiredLabel;
+                            }
                         }
                     }
                 }
@@ -1110,6 +1125,7 @@
         function createStatusBadge(status, progress = 0) {
             const statusClasses = {
                 'Downloading': 'status-downloading',
+                'Reconnecting': 'status-downloading',
                 'Waiting': 'status-waiting',
                 'Downloaded': 'status-downloaded',
                 'Already Exists': 'status-exists',
@@ -1117,11 +1133,12 @@
                 'Cancelled': 'status-cancelled',
                 'Unavailable': 'status-failed'
             };
-            const className = statusClasses[status] || '';
-            const displayText = status === 'Already Exists' ? 'Exists' : status;
+            const effectiveStatus = isReconnectingState(status) ? 'Reconnecting' : status;
+            const className = statusClasses[effectiveStatus] || '';
+            const displayText = effectiveStatus === 'Already Exists' ? 'Exists' : effectiveStatus;
             
             // Add progress for downloading status using background-size
-            if (status === 'Downloading') {
+            if (effectiveStatus === 'Downloading' || effectiveStatus === 'Reconnecting') {
                 return `<span class="status-badge ${className}" style="background-size: ${progress}% 100%, 100% 100%;">${displayText || 'N/A'}</span>`;
             }
             
@@ -1247,7 +1264,7 @@
             progressCell.innerHTML = `
                 <div class="progress-container">
                     <div class="progress-bar-fill" style="width: ${progress}%;">
-                        ${progress}%
+                        ${isReconnectingState(item.item_status) ? 'Reconnecting…' : `${progress}%`}
                     </div>
                 </div>
             `;
@@ -1372,8 +1389,15 @@
             socket.on('connect', function() {
                 console.log('WebSocket connected');
                 reconnectAttempts = 0;
+                hardRestartInProgress = false;
                 // Fetch initial data
                 fetchInitialData();
+            });
+
+            socket.on('hard_restart', function(data) {
+                console.warn('Hard restart announced by server:', data);
+                hardRestartInProgress = true;
+                renderTable(true);
             });
             
             socket.on('queue_update', function(data) {

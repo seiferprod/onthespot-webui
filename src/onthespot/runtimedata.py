@@ -164,8 +164,14 @@ def kill_all_workers():
         
         for worker in worker_threads:
             try:
-                # Skip if trying to stop current thread (causes deadlock)
-                if worker.thread == current_thread if hasattr(worker, 'thread') else False:
+                # Skip if trying to stop current thread (causes deadlock / RuntimeError on join)
+                worker_thread = None
+                if isinstance(worker, threading.Thread):
+                    worker_thread = worker
+                elif hasattr(worker, 'thread'):
+                    worker_thread = worker.thread
+
+                if worker_thread is current_thread:
                     logger_.warning(f"Skipping stop of current thread: {worker.__class__.__name__}")
                     continue
                     

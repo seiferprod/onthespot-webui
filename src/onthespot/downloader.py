@@ -359,9 +359,6 @@ class DownloadWorker:
     def run(self):
         last_heartbeat = time.time()
         heartbeat_interval = 60  # Log every 60 seconds
-        last_watchdog_check = time.time()
-        watchdog_interval = 30  # Check for stuck downloads every 30 seconds
-        stuck_timeout = 60  # Consider a download stuck after 1 minute
         
         while self.is_running:
             try:
@@ -371,28 +368,6 @@ class DownloadWorker:
                         is_processing = runtimedata.batch_queue_processing
                     logger.info(f"DownloadWorker heartbeat: batch_processing={is_processing}, queue_size={len(download_queue)}")
                     last_heartbeat = time.time()
-                
-                # Watchdog: Check for stuck downloads and trigger hard restart
-                if time.time() - last_watchdog_check > watchdog_interval:
-                    stuck_detected = False
-                    with download_queue_lock:
-                        current_time = time.time()
-                        for local_id, item in download_queue.items():
-                            # Check if item has been in "Downloading" state for too long
-                            if item['item_status'] == 'Downloading':
-                                last_update = item.get('last_update_time', 0)
-                                if current_time - last_update > stuck_timeout:
-                                    logger.error(f"⚠️ WATCHDOG ALERT: Download stuck for {int(current_time - last_update)}s: {item.get('item_name', 'Unknown')} - triggering hard worker restart!")
-                                    stuck_detected = True
-                                    break
-                    
-                    if stuck_detected:
-                        # Trigger hard restart of workers
-                        from .runtimedata import trigger_worker_restart
-                        trigger_worker_restart()
-                        return  # Exit this worker thread
-                    
-                    last_watchdog_check = time.time()
                 
                 try:
                     # Wait if QueueWorker is batch processing items into download queue
@@ -455,6 +430,8 @@ class DownloadWorker:
                 
                 logger.info(f"Starting download for track ID: {item_id} from service: {item_service}")
 
+                # Update progress before potentially blocking operations
+                self.update_progress(item, "Downloading", 2)
                 token = get_account_token(item_service, rotate=config.get("rotate_active_account_number"))
                 # Get account index for failure tracking
                 account_index = self._find_account_index(item_service, token) if token else None
@@ -626,9 +603,11 @@ class DownloadWorker:
                                             album_download_locks[stream_album_key] = threading.Lock()
                                         stream_album_lock = album_download_locks[stream_album_key]
                                     
-                                    # Acquire album lock for stream initialization
+                                    # Acquire album lock for stream initialization with timeout
                                     logger.debug(f"Reacquiring album lock for stream: {stream_album_key}")
-                                    stream_album_lock.acquire()
+                                    lock_acquired = stream_album_lock.acquire(timeout=60)
+                                    if not lock_acquired:
+                                        raise RuntimeError(f"Failed to acquire album lock for {stream_album_key} after 60s timeout - possible deadlock")
                                     try:
                                         logger.debug(f"Acquired album lock, getting stream: {stream_album_key}")
                                         # Get stream (with account fallback)
