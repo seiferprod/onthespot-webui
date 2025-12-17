@@ -253,7 +253,7 @@ class WatchdogWorker(threading.Thread):
 
     def run(self):
         logger.info('WatchdogWorker started')
-        stuck_timeout = 90  # Consider a download stuck after 90 seconds without updates
+        stuck_timeout = 30  # Consider a download stuck after 30 seconds without updates
         
         while self.is_running:
             try:
@@ -1164,7 +1164,7 @@ def main():
     
     def watchdog_hard_restart():
         """Hard restart triggered by watchdog for stuck system"""
-        trigger_hard_restart("watchdog detected stuck flags (60s timeout)")
+        trigger_hard_restart("watchdog detected stuck flags (30s timeout)")
 
     # Register the restart callbacks
     set_worker_restart_callback(restart_workers)  # Soft restart for failure threshold
