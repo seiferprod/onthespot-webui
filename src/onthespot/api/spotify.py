@@ -801,12 +801,27 @@ def spotify_get_search_results(token, search_term, content_types, _retry=False):
     params['q'] = search_term
     params['type'] = ",".join(c_type for c_type in content_types)
 
-    data = requests.get(f"{BASE_URL}/search", params=params, headers=headers).json()
+    response = requests.get(f"{BASE_URL}/search", params=params, headers=headers, timeout=10)
+    if response.status_code != 200:
+        logger.error(f"Spotify search failed: {response.status_code} - {response.text}")
+        return []
+    try:
+        data = response.json()
+    except ValueError as e:
+        logger.error(f"Spotify search response JSON error: {e}; status {response.status_code} - {response.text}")
+        return []
+    if isinstance(data, dict) and data.get("error"):
+        logger.error(f"Spotify search error payload: {data.get('error')}")
+        return []
 
     search_results = []
     playlist_year_cache = {}
     for key in data.keys():
-        for item in data[key]["items"]:
+        bucket = data.get(key, {})
+        items = bucket.get("items") if isinstance(bucket, dict) else None
+        if not items:
+            continue
+        for item in items:
             item_type = item['type']
             if item_type == "track":
                 item_name = f"{config.get('explicit_label') if item['explicit'] else ''} {item['name']}"
