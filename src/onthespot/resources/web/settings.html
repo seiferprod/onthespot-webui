@@ -775,6 +775,14 @@
                     <input type="number" id="retry_worker_delay" value="{{ config.retry_worker_delay }}">
                 </div>
                 <div class="setting-row">
+                    <label for="api_retry_max_attempts">API Retry Attempts</label>
+                    <input type="number" id="api_retry_max_attempts" value="{{ config.api_retry_max_attempts }}">
+                </div>
+                <div class="setting-row">
+                    <label for="api_retry_default_delay">API Retry Delay (seconds)</label>
+                    <input type="number" id="api_retry_default_delay" value="{{ config.api_retry_default_delay }}">
+                </div>
+                <div class="setting-row">
                     <label for="windows_10_explorer_thumbnails">Old ID3 Format (Win10)</label>
                     <label class="toggle-switch">
                         <input type="checkbox" id="windows_10_explorer_thumbnails" {% if config.windows_10_explorer_thumbnails %}checked{% endif %}>
@@ -1345,6 +1353,8 @@
                 maximum_download_workers: document.getElementById('maximum_download_workers').value,
                 enable_retry_worker: document.getElementById('enable_retry_worker').checked,
                 retry_worker_delay: document.getElementById('retry_worker_delay').value,
+                api_retry_max_attempts: document.getElementById('api_retry_max_attempts').value,
+                api_retry_default_delay: document.getElementById('api_retry_default_delay').value,
                 audio_download_path: document.getElementById('audio_download_path').value,
                 track_file_format: document.getElementById('track_file_format').value,
                 track_path_formatter: document.getElementById('track_path_formatter').value,
