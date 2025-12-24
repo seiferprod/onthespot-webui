@@ -16,7 +16,7 @@ from ..utils import make_call, conv_list_format
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
 
-# Cache for Spotify Web API client-credentials token
+# Cache pour le token Spotify Web API
 _spotify_app_token = {"access_token": None, "expires_at": 0}
 _spotify_app_token_lock = threading.Lock()
 
@@ -60,7 +60,7 @@ def _spotify_get_public_api_headers(token, context):
         return {"Authorization": f"Bearer {app_token}"}, "app"
     return {"Authorization": f"Bearer {token.tokens().get('user-read-email')}"}, "session"
 
-# --- FONCTIONS REQUISES PAR WEB.PY ET LE PARSING ---
+# --- FONCTIONS INDISPENSABLES POUR WEB.PY ---
 
 def spotify_get_track_metadata(token, track_id):
     headers, _ = _spotify_get_public_api_headers(token, "track metadata")
