@@ -132,6 +132,7 @@
             padding: 12px 18px;
             border-bottom: 1px solid #2a2a2a;
             gap: 15px;
+            flex-wrap: wrap;
         }
 
         .setting-row:last-child {
@@ -165,6 +166,11 @@
             outline: none;
             border-color: #1db954;
             box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.2);
+        }
+
+        .setting-row small {
+            flex-basis: 100%;
+            color: #777;
         }
 
         .toggle-switch {
@@ -700,6 +706,16 @@
                         <input type="checkbox" id="mirror_spotify_playback" {% if config.mirror_spotify_playback %}checked{% endif %}>
                         <span class="toggle-slider"></span>
                     </label>
+                </div>
+                <div class="setting-row">
+                    <label for="spotify_client_id">Spotify Client ID</label>
+                    <input type="text" id="spotify_client_id" value="{{ config.spotify_client_id }}" placeholder="Enter your client ID">
+                    <small>Used for Spotify Web API search via client-credentials (optional).</small>
+                </div>
+                <div class="setting-row">
+                    <label for="spotify_client_secret">Spotify Client Secret</label>
+                    <input type="password" id="spotify_client_secret" value="{{ config.spotify_client_secret }}" placeholder="Enter your client secret">
+                    <small>Env overrides: ONTHESPOT_SPOTIFY_CLIENT_ID / ONTHESPOT_SPOTIFY_CLIENT_SECRET.</small>
                 </div>
                 <div class="setting-row">
                     <label for="check_for_updates">Check for Updates</label>
@@ -1342,6 +1358,8 @@
                 disable_download_popups: document.getElementById('disable_download_popups').checked,
                 windows_10_explorer_thumbnails: document.getElementById('windows_10_explorer_thumbnails').checked,
                 mirror_spotify_playback: document.getElementById('mirror_spotify_playback').checked,
+                spotify_client_id: document.getElementById('spotify_client_id').value,
+                spotify_client_secret: document.getElementById('spotify_client_secret').value,
                 close_to_tray: document.getElementById('close_to_tray').checked,
                 check_for_updates: document.getElementById('check_for_updates').checked,
                 illegal_character_replacement: document.getElementById('illegal_character_replacement').value,

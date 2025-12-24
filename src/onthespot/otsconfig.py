@@ -120,6 +120,10 @@ class Config:
             "api_retry_max_attempts": 3, # Max retries on API rate limit (429)
             "api_retry_default_delay": 1, # Default delay (seconds) when Retry-After is missing
 
+            # Spotify Settings
+            "spotify_client_id": "", # Spotify Web API client ID (optional, for search)
+            "spotify_client_secret": "", # Spotify Web API client secret (optional, for search)
+
             # Search Settings
             "enable_search_tracks": True, # Enable listed category in search
             "enable_search_albums": True, # Enable listed category in search

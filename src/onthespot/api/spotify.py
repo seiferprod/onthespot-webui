@@ -20,6 +20,82 @@ BASE_URL = "https://api.spotify.com/v1"
 _album_track_ids_cache = {}
 _album_track_ids_cache_lock = threading.Lock()
 
+# Cache for Spotify Web API client-credentials token
+_spotify_app_token = {"access_token": None, "expires_at": 0}
+_spotify_app_token_lock = threading.Lock()
+
+
+def _mask_value(value, visible=6):
+    if not value:
+        return ""
+    if len(value) <= visible:
+        return value
+    return f"...{value[-visible:]}"
+
+
+def _spotify_get_app_access_token():
+    env_client_id = os.environ.get("ONTHESPOT_SPOTIFY_CLIENT_ID", "").strip()
+    env_client_secret = os.environ.get("ONTHESPOT_SPOTIFY_CLIENT_SECRET", "").strip()
+    cfg_client_id = config.get("spotify_client_id", "").strip()
+    cfg_client_secret = config.get("spotify_client_secret", "").strip()
+    client_id = env_client_id or cfg_client_id
+    client_secret = env_client_secret or cfg_client_secret
+    id_source = "env" if env_client_id else ("config" if cfg_client_id else "missing")
+    secret_source = "env" if env_client_secret else ("config" if cfg_client_secret else "missing")
+    logger.info(
+        "Spotify app creds status: client_id=%s (%s) client_secret=%s (%s)",
+        _mask_value(client_id),
+        id_source,
+        "set" if client_secret else "missing",
+        secret_source,
+    )
+    if not client_id or not client_secret:
+        logger.info("Spotify app creds missing; skipping client-credentials token.")
+        return None
+
+    now = time.time()
+    with _spotify_app_token_lock:
+        if _spotify_app_token["access_token"] and _spotify_app_token["expires_at"] > now + 30:
+            ttl = int(_spotify_app_token["expires_at"] - now)
+            logger.info("Spotify app token cache hit (ttl=%ss).", ttl)
+            return _spotify_app_token["access_token"]
+
+        logger.info(
+            "Requesting Spotify app token with client_id=%s secret=%s",
+            _mask_value(client_id),
+            "set" if client_secret else "missing",
+        )
+        try:
+            resp = requests.post(
+                "https://accounts.spotify.com/api/token",
+                data={"grant_type": "client_credentials"},
+                auth=(client_id, client_secret),
+                timeout=10,
+            )
+        except requests.RequestException as e:
+            logger.error("Spotify app token request failed: %s", e)
+            return None
+
+        if resp.status_code != 200:
+            logger.error(
+                "Spotify app token request error: %s - %s",
+                resp.status_code,
+                resp.text,
+            )
+            return None
+
+        data = resp.json()
+        access_token = data.get("access_token")
+        expires_in = int(data.get("expires_in", 0))
+        if not access_token:
+            logger.error("Spotify app token response missing access_token.")
+            return None
+
+        _spotify_app_token["access_token"] = access_token
+        _spotify_app_token["expires_at"] = now + expires_in
+        logger.info("Spotify app token refreshed (expires_in=%ss).", expires_in)
+        return access_token
+
 
 def _spotify_extract_year(value):
     if not value:
@@ -776,44 +852,59 @@ def spotify_get_search_results(token, search_term, content_types, _retry=False):
     logger.info(f"Get search result for term '{search_term}'")
 
     headers = {}
-    try:
-        headers['Authorization'] = f"Bearer {token.tokens().get('user-read-email')}"
-    except (RuntimeError, OSError, ConnectionError, Exception) as e:
-        if _retry:
-            logger.error(f"Failed to get token after retry: {e}")
-            raise
-        logger.warning(f"Token retrieval failed, attempting session reconnect: {e}")
+    auth_source = "session"
+    app_token = _spotify_get_app_access_token()
+    if app_token:
+        headers['Authorization'] = f"Bearer {app_token}"
+        auth_source = "app"
+        logger.info("Spotify search using app token.")
+    else:
         try:
-            # Re-initialize the session with retry logic
-            parsing_index = config.get('active_account_number')
-            spotify_re_init_session(account_pool[parsing_index])
-            # Get the new token
-            new_token = account_pool[parsing_index]['login']['session']
-            # Retry the search with the new token
-            return spotify_get_search_results(new_token, search_term, content_types, _retry=True)
-        except Exception as reconnect_error:
-            logger.error(f"Failed to reconnect and search: {reconnect_error}")
-            raise
+            headers['Authorization'] = f"Bearer {token.tokens().get('user-read-email')}"
+            logger.info("Spotify search using session token.")
+        except (RuntimeError, OSError, ConnectionError, Exception) as e:
+            if _retry:
+                logger.error(f"Failed to get token after retry: {e}")
+                raise
+            logger.warning(f"Token retrieval failed, attempting session reconnect: {e}")
+            try:
+                # Re-initialize the session with retry logic
+                parsing_index = config.get('active_account_number')
+                spotify_re_init_session(account_pool[parsing_index])
+                # Get the new token
+                new_token = account_pool[parsing_index]['login']['session']
+                # Retry the search with the new token
+                return spotify_get_search_results(new_token, search_term, content_types, _retry=True)
+            except Exception as reconnect_error:
+                logger.error(f"Failed to reconnect and search: {reconnect_error}")
+                raise
 
     params = {}
     params['limit'] = config.get("max_search_results")
     params['offset'] = '0'
     params['q'] = search_term
     params['type'] = ",".join(c_type for c_type in content_types)
+    logger.info(
+        "Spotify search request auth_source=%s types=%s limit=%s",
+        auth_source,
+        params['type'],
+        params['limit'],
+    )
 
     response = requests.get(f"{BASE_URL}/search", params=params, headers=headers, timeout=10)
+    logger.info("Spotify search response status=%s auth_source=%s", response.status_code, auth_source)
     if response.status_code == 429:
         retry_after = response.headers.get("Retry-After")
         if retry_after:
-            logger.error(f"Spotify rate limit exceeded. Retry after {retry_after}s.")
+            logger.error(f"Spotify rate limit exceeded ({auth_source}). Retry after {retry_after}s.")
         else:
-            logger.error("Spotify rate limit exceeded. Please try again later.")
+            logger.error(f"Spotify rate limit exceeded ({auth_source}). Please try again later.")
         return {
             "error": "Spotify rate limit exceeded.",
             "retry_after": retry_after,
         }
     if response.status_code != 200:
-        logger.error(f"Spotify search failed: {response.status_code} - {response.text}")
+        logger.error(f"Spotify search failed ({auth_source}): {response.status_code} - {response.text}")
         return []
     try:
         data = response.json()
