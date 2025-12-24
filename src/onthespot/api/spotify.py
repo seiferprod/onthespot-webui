@@ -1147,8 +1147,16 @@ def spotify_get_track_metadata(token, item_id, _retry=False, album_lock=None):
         # Retry with the new token
         return spotify_get_track_metadata(new_token, item_id, _retry=True)
 
-    market_param = "from_token" if auth_source == "session" else "US"
-    track_data = make_call(f'{BASE_URL}/tracks?ids={item_id}&market={market_param}', headers=headers)
+    if auth_source == "session":
+        market_param = "from_token"
+        track_data = make_call(f'{BASE_URL}/tracks?ids={item_id}&market={market_param}', headers=headers)
+    else:
+        market_param = "EU"
+        track_data = make_call(f'{BASE_URL}/tracks?ids={item_id}&market={market_param}', headers=headers)
+        if not track_data or track_data.get('tracks', [{}])[0].get('is_playable') is False:
+            logger.info("Spotify track metadata EU unavailable for %s; falling back to US", item_id)
+            market_param = "US"
+            track_data = make_call(f'{BASE_URL}/tracks?ids={item_id}&market={market_param}', headers=headers)
     if not track_data:
         logger.error(
             "Spotify track metadata request failed (%s, market=%s) for %s",
