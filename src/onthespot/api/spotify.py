@@ -96,17 +96,6 @@ def _spotify_get_app_access_token():
         logger.info("Spotify app token refreshed (expires_in=%ss).", expires_in)
         return access_token
 
-# Ces fonctions utilisent vos clés API (via _spotify_get_public_api_headers)
-# pour récupérer les infos des chansons. Sans elles, l'interface Web crash.
-
-def spotify_get_track_metadata(token, track_id):
-    headers, _ = _spotify_get_public_api_headers(token, "track metadata")
-    return make_call(f"{BASE_URL}/tracks/{track_id}", headers=headers)
-
-def spotify_get_podcast_episode_metadata(token, episode_id):
-    headers, _ = _spotify_get_public_api_headers(token, "episode metadata")
-    return make_call(f"{BASE_URL}/episodes/{episode_id}", headers=headers)
-
 def _spotify_get_public_api_headers(token, context):
     app_token = _spotify_get_app_access_token()
     if app_token:
